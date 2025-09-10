@@ -1,0 +1,43 @@
+# Core dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+python-multipart==0.0.6
+
+# Database and Storage
+minio==7.2.0
+redis==5.0.1
+
+# Authentication
+python-keycloak==3.8.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# AI and ML
+openai==1.3.7
+anthropic==0.7.8
+metagpt==0.6.6
+langgraph==0.0.40
+
+# Execution and Sandbox
+docker==6.1.3
+e2b==0.8.0
+
+# Monitoring and Logging
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+opentelemetry-instrumentation-fastapi==0.42b0
+structlog==23.2.0
+
+# HTTP Client
+httpx==0.25.2
+requests==2.31.0
+
+# Development
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0
