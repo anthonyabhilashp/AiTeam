@@ -1,20 +1,13 @@
-FROM python:3.11-slim
+# Database Initialization with Flyway
+FROM flyway/flyway:9.22-alpine
 
-WORKDIR /app
+# Copy migration files
+COPY sql/ /flyway/sql/
 
-# Install required packages
-RUN apt-get update && apt-get install -y \
-    postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+# Set Flyway configuration via environment variables
+ENV FLYWAY_BASELINE_ON_MIGRATE=true
+ENV FLYWAY_VALIDATE_ON_MIGRATE=true
+ENV FLYWAY_OUT_OF_ORDER=true
 
-# Copy requirements
-COPY saas-devgen/db-init/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy shared utilities and initialization script
-COPY shared/ ./shared/
-COPY saas-devgen/db-init/init_db.py .
-COPY saas-devgen/db-init/migrations/ ./migrations/
-
-# Run initialization
-CMD ["python", "init_db.py"]
+# Default command
+CMD ["migrate"]

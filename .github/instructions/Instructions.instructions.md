@@ -65,6 +65,8 @@ i have built auth-service and gateway-service
 Leverage them and build all other services going forward, in same pettern.
 make and docker compose file shuld be updated similarly.
 
+you should never call keycloak directly instead call auth-service
+we are building a high end enterprise product here which will go as saas offering into production so keep that in mind
 
 This is my requirement:
  

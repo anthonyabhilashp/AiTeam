@@ -8,6 +8,8 @@ import requests
 import os
 from typing import Optional, List
 import json
+from kafka import KafkaProducer
+import json as json_lib
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -19,6 +21,29 @@ KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "admin-cli")  # Use admin-c
 KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "")
 KEYCLOAK_ADMIN_USER = os.getenv("KEYCLOAK_ADMIN_USER", "admin")
 KEYCLOAK_ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+
+# Kafka configuration
+KAFKA_BROKER_URL = os.getenv("KAFKA_BROKER_URL", "localhost:9092")
+KAFKA_TOPIC_USER_REGISTRATION = os.getenv("KAFKA_TOPIC_USER_REGISTRATION", "user-registration-events")
+
+# Initialize Kafka producer (lazy initialization)
+kafka_producer = None
+
+def get_kafka_producer():
+    """Lazy initialization of Kafka producer."""
+    global kafka_producer
+    if kafka_producer is None:
+        try:
+            kafka_producer = KafkaProducer(
+                bootstrap_servers=[KAFKA_BROKER_URL],
+                value_serializer=lambda v: json_lib.dumps(v).encode('utf-8'),
+                key_serializer=lambda k: k.encode('utf-8') if k else None
+            )
+            print(f"✅ Kafka producer initialized with broker: {KAFKA_BROKER_URL}")
+        except Exception as e:
+            print(f"❌ Failed to initialize Kafka producer: {e}")
+            kafka_producer = None
+    return kafka_producer
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -256,6 +281,29 @@ async def register_user(request: RegisterRequest):
         }
 
         user_id = kc_admin.create_user(user_data)
+
+        # Publish user registration event to Kafka
+        try:
+            producer = get_kafka_producer()
+            if producer:
+                event_data = {
+                    "event_type": "user_registered",
+                    "user_id": user_id,
+                    "username": request.username,
+                    "email": request.email,
+                    "first_name": request.first_name,
+                    "last_name": request.last_name,
+                    "timestamp": json_lib.dumps(None)  # Will be set by consumer or use current time
+                }
+                producer.send(KAFKA_TOPIC_USER_REGISTRATION, key=user_id, value=event_data)
+                producer.flush()
+                print(f"📤 Published user registration event for user: {user_id}")
+            else:
+                print("⚠️  Kafka producer not available, skipping event publication")
+        except Exception as e:
+            print(f"⚠️  Failed to publish user registration event: {e}")
+            # Don't fail registration if Kafka publishing fails
+
         return RegisterResponse(
             user_id=user_id,
             message="User registered successfully"

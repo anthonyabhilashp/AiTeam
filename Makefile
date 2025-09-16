@@ -1,7 +1,7 @@
 # Enterprise AI Software Generator Platform
 # Production-ready Makefile for build and deployment
 
-.PHONY: help build build-all run run-all stop clean test install deps check-deps setup-dev setup-prod init-database docker-build docker-run k8s-deploy k8s-clean logs status status-all health backup restore setup-gateway-service setup-profile-service setup-codegen-service setup-executor-service setup-storage-service setup-audit-service setup-orchestrator setup-api-gateway build-gateway-service build-profile-service build-codegen-service build-executor-service build-storage-service build-audit-service build-orchestrator build-api-gateway run-gateway-service run-profile-service run-codegen-service run-executor-service run-storage-service run-audit-service run-orchestrator run-api-gateway stop-gateway-service stop-profile-service stop-codegen-service stop-executor-service stop-storage-service stop-audit-service stop-orchestrator stop-api-gateway
+.PHONY: help build build-all run run-all stop clean test install deps check-deps setup-dev setup-prod docker-build docker-run k8s-deploy k8s-clean logs status status-all health backup restore setup-gateway-service setup-profile-service setup-codegen-service setup-executor-service setup-storage-service setup-audit-service setup-orchestrator setup-api-gateway build-gateway-service build-profile-service build-codegen-service build-executor-service build-storage-service build-audit-service build-orchestrator build-api-gateway run-gateway-service run-profile-service run-codegen-service run-executor-service run-storage-service run-audit-service run-orchestrator run-api-gateway stop-gateway-service stop-profile-service stop-codegen-service stop-executor-service stop-storage-service stop-audit-service stop-orchestrator stop-api-gateway
 
 # Default target
 help:
@@ -13,7 +13,6 @@ help:
 	@echo "  setup-dev    Setup development environment"
 	@echo "  setup-prod   Setup production environment"
 	@echo "  setup <name> Setup specific service (e.g., make setup db-init)"
-	@echo "  init-database Initialize database schema and data"
 	@echo "  install      Install all dependencies"
 	@echo "  build        Build all services as Docker images"
 	@echo "  build <name> Build specific service as Docker image (e.g., make build auth-service)"
@@ -82,11 +81,43 @@ check-deps:
 	@docker compose version >/dev/null 2>&1 || { echo "Docker Compose is required but not available. Aborting." >&2; exit 1; }
 	@echo "All system dependencies are available!"
 
-# Database setup
-init-database:
-	@echo "Initializing database schema and data..."
-	@cd saas-devgen/db-init && python init_db.py
-	@echo "Database initialization complete!"
+# Database setup targets are available as:
+# make build db-init  - Build the db-init Docker service
+# make run db-init    - Run database initialization with Flyway migrations
+
+# Run targets
+run-db-init:
+	@echo "Starting DB Init Service (Docker)..."
+	@if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
+		docker compose up db-init; \
+		if [ $$? -eq 0 ]; then \
+			echo "✅ DB Init Service completed successfully!"; \
+			echo "📊 Database schema initialized with Flyway migrations"; \
+		else \
+			echo "❌ Failed to run DB Init Service"; \
+			exit 1; \
+		fi \
+	else \
+		echo "❌ Docker or Docker Compose not available"; \
+		exit 1; \
+	fi
+
+# Build targets (Docker images)
+build-db-init:
+	@echo "Building DB Init Service Docker image..."
+	@if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
+		docker compose build db-init; \
+		if [ $$? -eq 0 ]; then \
+			echo "✅ DB Init Service Docker image built successfully!"; \
+		else \
+			echo "❌ Failed to build DB Init Service Docker image"; \
+			exit 1; \
+		fi \
+	else \
+		echo "❌ Docker or Docker Compose not available"; \
+		echo "Please install Docker and Docker Compose to build services"; \
+		exit 1; \
+	fi
 
 # Handle multi-argument build command (e.g., make build auth-service)
 build:
@@ -503,9 +534,23 @@ run-auth-service:
 	fi
 
 run-profile-service:
-	@echo "Starting Profile Service..."
-	@cd saas-devgen/profile-service && ./start.sh & echo $$! > profile.pid
-	@echo "Profile Service started! PID: $$(cat profile.pid)"
+	@echo "Starting Profile Service (Docker)..."
+	@if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
+		export PROFILE_SERVICE_PORT=$$(grep '^PROFILE_SERVICE_PORT=' .env | cut -d'=' -f2 || echo '8005'); \
+		docker compose up -d profile-service; \
+		if [ $$? -eq 0 ]; then \
+			echo "✅ Profile Service started successfully!"; \
+			echo "🌐 Service URL: http://localhost:$${PROFILE_SERVICE_PORT}"; \
+			echo "📖 API Docs: http://localhost:$${PROFILE_SERVICE_PORT}/docs"; \
+			echo "🔄 Health: http://localhost:$${PROFILE_SERVICE_PORT}/health"; \
+		else \
+			echo "❌ Failed to start Profile Service"; \
+			exit 1; \
+		fi \
+	else \
+		echo "❌ Docker or Docker Compose not available"; \
+		exit 1; \
+	fi
 
 run-codegen-service:
 	@echo "Starting Codegen Service..."
@@ -572,15 +617,19 @@ stop-auth-service:
 	fi
 
 stop-profile-service:
-	@echo "Stopping Profile Service..."
-	@-if [ -f "saas-devgen/profile-service/profile.pid" ]; then \
-		kill `cat saas-devgen/profile-service/profile.pid` 2>/dev/null || true; \
-		rm -f saas-devgen/profile-service/profile.pid; \
+	@echo "Stopping Profile Service (Docker)..."
+	@if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
+		docker compose down profile-service; \
+		if [ $$? -eq 0 ]; then \
+			echo "✅ Profile Service stopped successfully!"; \
+		else \
+			echo "❌ Failed to stop Profile Service"; \
+			exit 1; \
+		fi \
+	else \
+		echo "❌ Docker or Docker Compose not available"; \
+		exit 1; \
 	fi
-	@echo "Killing any remaining processes on port 8007..."
-	@-lsof -ti:8007 | xargs kill -9 2>/dev/null || true
-	@sleep 2
-	@echo "Profile Service stopped!"
 
 stop-codegen-service:
 	@echo "Stopping Codegen Service..."

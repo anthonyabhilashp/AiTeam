@@ -10,6 +10,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY saas-devgen/auth-service/main.py .
 COPY saas-devgen/auth-service/tests/ ./tests/
 
-EXPOSE 8001
+EXPOSE 8004
 
 CMD ["python", "main.py"]
