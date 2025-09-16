@@ -61,7 +61,9 @@ i want like this a non tech person comes to our app and says, i want to build a 
 then tasks should be created and code should be geenrated this was my vision, unfortunately previous model that worked on this claude model messed up somethings and now i am int his state,
 as i said we want an enterprise product to be built., and also i want to make use of proven ;ibraries instead of reinventing wheel again.
 
-
+i have built auth-service and gateway-service
+Leverage them and build all other services going forward, in same pettern.
+make and docker compose file shuld be updated similarly.
 
 
 This is my requirement:

@@ -9,15 +9,36 @@ import os
 from typing import Optional, List
 import json
 
-app = FastAPI(title="Auth Service", version="1.0.0")
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 
 # Keycloak configuration
 KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "http://localhost:8080")
-KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "master")
-KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "auth-service")
-KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "client-secret")
+KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "master")  # Use master realm for now
+KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "admin-cli")  # Use admin-cli client for now
+KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "")
 KEYCLOAK_ADMIN_USER = os.getenv("KEYCLOAK_ADMIN_USER", "admin")
 KEYCLOAK_ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle application startup and shutdown events."""
+    print("🚀 STARTUP EVENT TRIGGERED - Auth service is starting up!")
+    try:
+        print("👤 Creating default admin user...")
+        await create_default_admin_user()
+        print("✅ Auth service initialization completed")
+    except Exception as e:
+        print(f"❌ Warning: Failed to create default admin user: {e}")
+        import traceback
+        print(f"❌ Full traceback: {traceback.format_exc()}")
+
+    yield
+
+    # Shutdown logic (if needed)
+    print("🛑 Auth service is shutting down...")
+
+app = FastAPI(title="Auth Service", version="1.0.0", lifespan=lifespan)
 
 # Initialize Keycloak clients (lazy initialization)
 keycloak_openid = None
@@ -40,6 +61,10 @@ def get_keycloak_admin():
     global keycloak_admin
     if keycloak_admin is None:
         try:
+            print(f"🔗 Connecting to Keycloak admin at {KEYCLOAK_URL}")
+            print(f"👤 Using admin user: {KEYCLOAK_ADMIN_USER}")
+            print(f"🏰 Using realm: {KEYCLOAK_REALM}")
+            print(f"📱 Using client: {KEYCLOAK_CLIENT_ID}")
             keycloak_admin = KeycloakAdmin(
                 server_url=KEYCLOAK_URL,
                 username=KEYCLOAK_ADMIN_USER,
@@ -49,7 +74,11 @@ def get_keycloak_admin():
                 client_secret_key=KEYCLOAK_CLIENT_SECRET,
                 verify=True
             )
-        except Exception:
+            print("✅ Keycloak admin client created successfully")
+        except Exception as e:
+            print(f"❌ Failed to create Keycloak admin client: {e}")
+            import traceback
+            print(f"❌ Full error: {traceback.format_exc()}")
             # Return None if Keycloak is not available (for testing)
             keycloak_admin = None
     return keycloak_admin
@@ -401,6 +430,71 @@ async def update_user_roles(
             status_code=500,
             detail=f"Role update failed: {str(e)}"
         )
+
+async def create_default_admin_user():
+    """Create default admin user if it doesn't exist."""
+    print("🔧 Starting admin user creation process...")
+    try:
+        print("🔗 Getting Keycloak admin client...")
+        keycloak_admin = get_keycloak_admin()
+        if not keycloak_admin:
+            print("❌ Keycloak admin client not available, skipping default user creation")
+            return
+
+        print("✅ Keycloak admin client obtained successfully")
+
+        # Check if admin user already exists
+        try:
+            users = keycloak_admin.get_users({"username": "admin"})
+            if users and len(users) > 0:
+                print("Default admin user already exists, skipping creation")
+                return
+        except Exception as e:
+            print(f"Error checking for existing admin user: {e}")
+            # Continue with creation if we can't check
+
+        # Create default admin user
+        user_data = {
+            "username": "admin",
+            "email": "admin@example.com",
+            "firstName": "Admin",
+            "lastName": "User",
+            "enabled": True,
+            "emailVerified": True,
+            "credentials": [
+                {
+                    "type": "password",
+                    "value": "admin",
+                    "temporary": False
+                }
+            ],
+            "realmRoles": ["admin"],
+            "clientRoles": {}
+        }
+
+        # Create the user
+        try:
+            user_id = keycloak_admin.create_user(user_data)
+            print(f"Created default admin user with ID: {user_id}")
+
+            # Assign admin role
+            try:
+                admin_role = keycloak_admin.get_realm_role("admin")
+                keycloak_admin.assign_realm_roles(user_id, [admin_role])
+                print("Assigned admin role to default user")
+            except Exception as e:
+                print(f"Warning: Could not assign admin role: {e}")
+
+        except Exception as e:
+            if "already exists" in str(e).lower() or "409" in str(e):
+                print("Admin user already exists, skipping creation")
+            else:
+                print(f"Error creating default admin user: {e}")
+                raise
+
+    except Exception as e:
+        print(f"Error in create_default_admin_user: {e}")
+        # Don't raise exception to prevent service startup failure
 
 @app.get("/health")
 async def health_check():
