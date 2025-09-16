@@ -1,8 +1,38 @@
 # AI Software Generator Platform
 
+# AI Software Generator Platform
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)](https://docker.com)
+[![Kong](https://img.shields.io/badge/Kong-3.4-000000)](https://konghq.com)
+[![Keycloak](https://img.shields.io/badge/Keycloak-24.0-000000)](https://www.keycloak.org)
+
+An enterprise-grade SaaS platform foundation with Kong API Gateway and Keycloak authentication. Currently implementing core authentication and API management services, with AI-powered software generation capabilities planned for future releases.
+
+**Currently focusing on authentication and API gateway foundation. Full AI software generation platform coming soon!**
+
+## 🛠️ Built With
+
+### Core Technologies
+- **Kong**: Enterprise API gateway and microservices management
+- **Keycloak**: Open-source identity and access management
+- **PostgreSQL**: Advanced open-source database
+- **Docker**: Containerization platform
+- **Python**: Backend services with FastAPI framework
+- **pytest**: Comprehensive testing framework
+
+### Infrastructure
+- **Docker Compose**: Multi-container application management
+- **Makefile**: Build automation and development workflows
+- **Git**: Version control and collaboration
+
+### Security & Authentication
+- **JWT**: JSON Web Tokens for secure API authentication
+- **OAuth 2.0**: Authorization framework with Keycloak
+- **CORS**: Cross-origin resource sharing configuration
+
+[🚀 Quick Start](#-quick-start) | [📖 Documentation](docs/) | [🔧 Auth Service](saas-devgen/auth-service/) | [🌐 Gateway Service](saas-devgen/gateway-service/)tps://docker.com)
 [![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=flat&logo=kubernetes&logoColor=white)](https://kubernetes.io)
 
 An enterprise-grade SaaS platform that automatically generates production-ready software from natural language requirements using AI-powered agents.
@@ -10,24 +40,23 @@ An enterprise-grade SaaS platform that automatically generates production-ready 
 ## 🌟 Features
 
 ### Core Capabilities
-- **AI-Powered Requirements Analysis**: Break down complex software requirements into actionable tasks
-- **Automated Code Generation**: Generate production-ready code using MetaGPT and template systems
-- **Secure Sandbox Execution**: Run and test generated code in isolated Docker environments
-- **Multi-tenant Architecture**: Complete tenant isolation with RBAC and audit logging
-- **Enterprise Integrations**: Support for PostgreSQL, MinIO, Keycloak, Redis, and more
+- **Kong API Gateway**: Enterprise-grade API management with authentication, routing, and rate limiting
+- **Keycloak Authentication**: Complete identity management with JWT tokens and role-based access control
+- **Docker-based Architecture**: Containerized microservices with proper isolation
+- **PostgreSQL Integration**: Robust database backend for user and session management
+- **Comprehensive Testing**: Full test coverage with unit, integration, and security tests
 
-### AI Integration
-- **Multiple AI Providers**: OpenAI GPT-4, Anthropic Claude, and OpenRouter support
-- **Intelligent Task Breakdown**: AI analyzes requirements and creates detailed task lists
-- **Code Generation**: Generate complete applications with proper structure and dependencies
-- **Fallback Mechanisms**: Graceful degradation when AI services are unavailable
+### Current Services
+- **Auth Service**: User authentication, registration, JWT token management
+- **Gateway Service**: API routing, request transformation, security plugins
+- **Database Layer**: PostgreSQL with connection pooling and migrations
+- **Monitoring**: Health checks and service discovery
 
 ### Enterprise Features
-- **Audit Logging**: Complete audit trail with OpenTelemetry and Loki integration
-- **Security**: JWT authentication, role-based access control, and secure sandboxing
-- **Scalability**: Kubernetes-native deployment with horizontal pod autoscaling
-- **Monitoring**: Comprehensive metrics and logging with Prometheus and Grafana
-- **Backup & Recovery**: Automated database and file backups
+- **Security**: JWT authentication, rate limiting, CORS configuration
+- **Scalability**: Docker-based deployment with horizontal scaling support
+- **Monitoring**: Health endpoints and service status monitoring
+- **Testing**: Comprehensive test suite with 50+ tests across services
 
 ## 🚀 Quick Start
 
@@ -38,8 +67,8 @@ An enterprise-grade SaaS platform that automatically generates production-ready 
 
 ### 1. Clone and Setup
 ```bash
-git clone https://github.com/your-org/ai-software-generator.git
-cd ai-software-generator
+git clone https://github.com/anthonyabhilashp/AiTeam.git
+cd AiTeam
 
 # Copy environment template
 cp .env.example .env
@@ -57,74 +86,58 @@ make up
 docker-compose up -d
 ```
 
-### 3. Access the Platform
+### 3. Access the Services
 ```bash
-# API Gateway
+# Kong API Gateway
 open http://localhost:8000
 
-# API Documentation
-open http://localhost:8000/docs
+# Kong Admin Interface
+open http://localhost:8002
+
+# Keycloak Admin Console
+open http://localhost:8080
 
 # Health Check
-curl http://localhost:8000/health
+curl http://localhost:8001/status
+```
+
+### 4. Test Authentication
+```bash
+# Login to Keycloak
+curl -X POST http://localhost:8080/realms/master/protocol/openid-connect/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin"
+
+# Use JWT token with API Gateway
+curl -X GET http://localhost:8000/auth/user \
+  -H "Authorization: Bearer your-jwt-token"
 ```
 
 ## 📋 Architecture
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   User Request  │───▶│  API Gateway    │───▶│  Orchestrator   │
-│                 │    │  (FastAPI)      │    │  (AI Analysis)  │
+│   User Request  │───▶│  API Gateway    │───▶│  Auth Service   │
+│                 │    │  (Kong)         │    │  (Keycloak)     │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
                                                         │
-┌─────────────────┐    ┌─────────────────┐             ▼
-│   Auth Service  │    │  Codegen        │    ┌─────────────────┐
-│   (Keycloak)    │    │  Service        │    │  Task Breakdown │
-└─────────────────┘    │  (MetaGPT)      │    │  & AI Planning  │
-                       └─────────────────┘    └─────────────────┘
-                                │                        │
-┌─────────────────┐             ▼               ┌─────────────────┐
-│  Storage        │    ┌─────────────────┐     │  Project        │
-│  Service        │    │  Code           │     │  Repository     │
-│  (MinIO)        │    │  Generation     │     │  Creation       │
-└─────────────────┘    └─────────────────┘     └─────────────────┘
-                                │                        │
-┌─────────────────┐    ┌─────────────────┐             ▼
-│  Audit Service  │    │  Executor       │    ┌─────────────────┐
-│  (OpenTelemetry)│    │  Service        │    │  Sandbox        │
-└─────────────────┘    │  (Docker)       │    │  Execution      │
-                       └─────────────────┘    │  & Testing      │
-                                │             └─────────────────┘
-┌─────────────────┐             ▼                        │
-│  Database       │    ┌─────────────────┐             ▼
-│  (PostgreSQL)   │    │  Test Results   │    ┌─────────────────┐
-└─────────────────┘    │  & Logs         │    │  Deployment     │
-                       └─────────────────┘    │  Package        │
+                                               ┌─────────────────┐
+                                               │  JWT            │
+                                               │  Authentication │
+                                               │  & Authorization│
                                                └─────────────────┘
 ```
 
 ## 🏗️ Service Components
 
 ### Core Services
-- **API Gateway**: Unified entry point with routing, authentication, and rate limiting
-- **Orchestrator**: AI-powered requirement analysis and task orchestration
-- **Codegen Service**: Code generation using MetaGPT and template systems
-- **Executor Service**: Secure sandbox execution with Docker isolation
-- **Storage Service**: File and project artifact management with MinIO
-- **Audit Service**: Comprehensive logging and telemetry
-
-### Supporting Services
-- **Auth Service**: Identity management with Keycloak integration
-- **Profile Service**: AI provider settings and user preferences
-- **Workflow Engine**: Complex process orchestration with Temporal
-- **Testing Framework**: Automated testing and quality assurance
+- **API Gateway**: Kong-based API gateway with routing, authentication, and rate limiting
+- **Auth Service**: Identity management with Keycloak integration and JWT tokens
 
 ### Infrastructure
-- **PostgreSQL**: Primary database with multi-tenant support
-- **MinIO**: S3-compatible object storage
-- **Redis**: Caching and session management
-- **Loki**: Log aggregation and analysis
-- **Prometheus**: Metrics collection and monitoring
+- **PostgreSQL**: Primary database for user and session data
+- **Kong**: API gateway and reverse proxy
+- **Keycloak**: Identity and access management
 
 ## 🔧 Configuration
 
@@ -137,108 +150,87 @@ POSTGRES_USER=devgen
 POSTGRES_PASSWORD=your_secure_password
 POSTGRES_DB=devgen
 
-# AI Providers (choose at least one)
-OPENAI_API_KEY=sk-your-openai-key
-ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
+# Kong Configuration
+KONG_DATABASE=postgres
+KONG_PG_HOST=postgres
+KONG_PG_PORT=5432
+KONG_PG_USER=devgen
+KONG_PG_PASSWORD=your_secure_password
 
-# Storage
-MINIO_ROOT_USER=admin
-MINIO_ROOT_PASSWORD=your_secure_minio_password
-
-# Authentication
+# Keycloak Configuration
 KEYCLOAK_ADMIN=admin
 KEYCLOAK_ADMIN_PASSWORD=your_secure_keycloak_password
 ```
 
-#### Optional
-```bash
-# Redis (for caching)
-REDIS_URL=redis://localhost:6379
+### Docker Compose Setup
 
-# Logging
-LOKI_URL=http://localhost:3100
-
-# Security
-JWT_SECRET_KEY=your-256-bit-secret
-```
-
-### Docker Compose Override
-
-For development with live reloading:
 ```yaml
 version: '3.8'
 services:
-  api-gateway:
-    volumes:
-      - ./saas-devgen/api-gateway:/app
+  postgres:
+    image: postgres:14
     environment:
-      - DEBUG=true
-    command: uvicorn main:app --reload --host 0.0.0.0 --port 8000
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+  kong:
+    image: kong:3.4
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres
+      KONG_PG_PORT: 5432
+      KONG_PG_USER: ${KONG_PG_USER}
+      KONG_PG_PASSWORD: ${KONG_PG_PASSWORD}
+    ports:
+      - "8000:8000"  # Proxy
+      - "8001:8001"  # Admin API
+      - "8002:8002"  # Admin GUI
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    command: start-dev
+    ports:
+      - "8080:8080"
 ```
 
 ## 📖 Usage Examples
 
-### 1. Create a Requirement
+### 1. Authentication Flow
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/requirements \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-jwt-token" \
-  -d '{
-    "requirement": "Build a REST API for task management with user authentication"
-  }'
+# Login to get JWT token
+curl -X POST http://localhost:8080/realms/master/protocol/openid-connect/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin"
+
+# Use JWT token for API access
+curl -X GET http://localhost:8000/auth/user \
+  -H "Authorization: Bearer your-jwt-token"
 ```
 
-**Response:**
-```json
-{
-  "requirement_id": 1,
-  "text": "Build a REST API for task management with user authentication",
-  "status": "completed",
-  "tasks": [
-    {
-      "id": 1,
-      "description": "Design REST API endpoints and data models",
-      "status": "pending"
-    },
-    {
-      "id": 2,
-      "description": "Set up FastAPI project structure with middleware",
-      "status": "pending"
-    }
-  ]
-}
-```
-
-### 2. Generate Code
+### 2. Gateway Health Check
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/codegen/1 \
-  -H "Authorization: Bearer your-jwt-token" \
-  -d '{
-    "language": "python",
-    "framework": "fastapi",
-    "additional_requirements": "Add comprehensive error handling"
-  }'
+# Check Kong status
+curl http://localhost:8001/status
+
+# Check gateway health
+curl http://localhost:8000/health
 ```
 
-### 3. Execute Tests
+### 3. API Routing
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/projects/1/sandbox \
-  -H "Authorization: Bearer your-jwt-token" \
-  -d '{
-    "command": "python -m pytest",
-    "timeout": 300
-  }'
-```
+# Access auth service through gateway
+curl -X GET http://localhost:8000/auth/user \
+  -H "Authorization: Bearer your-jwt-token"
 
-### 4. Download Project
-
-```bash
-curl -X GET http://localhost:8000/api/v1/projects/1/download \
-  -H "Authorization: Bearer your-jwt-token" \
-  -o generated_project.zip
+# Kong admin interface
+open http://localhost:8002
 ```
 
 ## 🧪 Testing
@@ -250,35 +242,11 @@ make test-all
 
 ### Run Service-Specific Tests
 ```bash
-# Auth Service tests (50 tests covering authentication, security, integration)
+# Auth Service tests (comprehensive authentication and security testing)
 make test-auth-service
 
-# Orchestrator tests
-make test-orchestrator
-
-# Codegen Service tests
-make test-codegen-service
-
-# API Gateway tests
-make test-api-gateway
-
-# Storage Service tests
-make test-storage-service
-
-# Audit Service tests
-make test-audit-service
-
-# Executor Service tests
-make test-executor-service
-
-# Profile Service tests
-make test-profile-service
-```
-
-### Integration Tests
-```bash
-# Run integration tests across all services
-make test-integration
+# Gateway Service tests (Kong API gateway testing)
+make test-gateway-service
 ```
 
 ### Test Coverage
@@ -294,7 +262,7 @@ open htmlcov/index.html
 
 ### Development
 ```bash
-# Start all services
+# Start services
 make up
 
 # View logs
@@ -309,266 +277,105 @@ make down
 # Build production images
 make build-prod
 
-# Deploy to Kubernetes
-make deploy-k8s
-
-# Or use Docker Compose
+# Deploy with Docker Compose
 docker-compose -f docker-compose.prod.yml up -d
-```
-
-### Cloud Platforms
-
-#### AWS
-```bash
-# Deploy to EKS
-make deploy-aws
-
-# Use AWS services (RDS, S3, ElastiCache)
-# See docs/PRODUCTION_DEPLOYMENT.md for details
-```
-
-#### Google Cloud
-```bash
-# Deploy to GKE
-make deploy-gcp
-
-# Use Cloud SQL, Cloud Storage, Memorystore
-```
-
-#### Azure
-```bash
-# Deploy to AKS
-make deploy-azure
-
-# Use Azure Database, Blob Storage, Cache
 ```
 
 ## 📊 Monitoring
 
 ### Health Checks
 ```bash
-# Overall health
+# Kong health
+curl http://localhost:8001/status
+
+# Auth service health
+curl http://localhost:8000/auth/health
+
+# Overall system health
 curl http://localhost:8000/health
-
-# Database health
-curl http://localhost:8000/health/database
-
-# AI providers health
-curl http://localhost:8000/health/ai
 ```
 
-### Metrics
+### Kong Admin Interface
 ```bash
-# Prometheus metrics
-curl http://localhost:8000/metrics
+# Access Kong Manager
+open http://localhost:8002
 
-# Custom metrics
-curl http://localhost:8000/metrics/custom
-```
-
-### Logging
-```bash
-# View application logs
-docker-compose logs -f
-
-# Search logs with Loki
-logcli query '{service="api-gateway"}' --addr=http://localhost:3100
+# Kong Admin API
+curl http://localhost:8001/services
+curl http://localhost:8001/routes
 ```
 
 ## 🔒 Security
 
 ### Authentication & Authorization
 - JWT-based authentication with Keycloak integration
+- Kong JWT plugin for API gateway authentication
 - Role-based access control (RBAC)
-- Multi-tenant isolation
-- API rate limiting
-
-### Data Protection
-- Encrypted database connections
-- Secure file storage with MinIO
-- Audit logging for all operations
-- GDPR and SOC2 compliance ready
+- Secure token management
 
 ### Network Security
-- HTTPS/TLS encryption
-- Network policies in Kubernetes
-- Secure sandbox execution
-- Input validation and sanitization
+- HTTPS/TLS encryption (configurable)
+- API rate limiting with Kong
+- Request/response transformation
+- CORS configuration
 
 ## 🤝 Contributing
 
 ### Development Setup
 ```bash
-# Fork the repository
-git clone https://github.com/your-username/ai-software-generator.git
-cd ai-software-generator
+# Clone repository
+git clone https://github.com/anthonyabhilashp/AiTeam.git
+cd AiTeam
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start development services
+# Start development environment
 make dev-up
+
+# Run tests
+make test-auth-service
+make test-gateway-service
 ```
 
 ### Code Standards
 - Follow PEP 8 for Python code
-- Use type hints and docstrings
 - Write comprehensive unit tests
 - Update documentation for changes
-
-### Pull Request Process
-1. Create a feature branch from `main`
-2. Make changes with tests
-3. Ensure all tests pass
-4. Update documentation
-5. Submit pull request with description
-
-### Commit Guidelines
-```bash
-# Use conventional commits
-git commit -m "feat: add AI requirement breakdown"
-git commit -m "fix: resolve MetaGPT integration issue"
-git commit -m "docs: update API reference"
-```
+- Use type hints and docstrings
 
 ## 📚 Documentation
 
-### User Guides
+### Available Documentation
 - [API Reference](docs/API_REFERENCE.md) - Complete API documentation
 - [Development Setup](docs/DEVELOPMENT_SETUP.md) - Local development guide
-- [Production Deployment](docs/PRODUCTION_DEPLOYMENT.md) - Production deployment guide
-
-### Technical Documentation
-- [Architecture Overview](docs/ARCHITECTURE.md) - System architecture details
-- [Database Schema](docs/DATABASE_SCHEMA.md) - Database design and migrations
-- [Security Guide](docs/SECURITY.md) - Security best practices
-- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
+- [Auth Service Guide](saas-devgen/auth-service/README.md) - Authentication service details
+- [Gateway Service Guide](saas-devgen/gateway-service/README.md) - API gateway details
 
 ### API Documentation
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **OpenAPI Spec**: http://localhost:8000/openapi.json
+- **Kong Admin API**: http://localhost:8001/docs
+- **Keycloak Admin Console**: http://localhost:8080
+- **Kong Manager**: http://localhost:8002
 
-## 🏢 Enterprise Features
+## 🏢 Current Status
 
-### Multi-tenancy
-- Complete tenant isolation
-- Per-tenant resource quotas
-- Tenant-specific configurations
-- Cross-tenant audit logging
+### ✅ Working Services
+- **Auth Service**: Complete authentication with Keycloak, JWT tokens, user management
+- **Gateway Service**: Kong-based API gateway with routing, authentication, rate limiting
 
-### Compliance
-- SOC 2 Type II ready
-- GDPR compliance
-- HIPAA ready (healthcare option)
-- Custom compliance frameworks
+### 🔄 In Development
+- **Orchestrator Service**: AI-powered requirement analysis (planned)
+- **Codegen Service**: Automated code generation (planned)
+- **Executor Service**: Sandbox execution environment (planned)
+- **Storage Service**: File and artifact management (planned)
+- **Audit Service**: Logging and telemetry (planned)
 
-### Integrations
-- **Version Control**: GitHub, GitLab, Bitbucket
-- **CI/CD**: Jenkins, GitHub Actions, GitLab CI
-- **Monitoring**: Datadog, New Relic, Splunk
-- **Security**: Snyk, SonarQube, Checkmarx
-
-### Support
-- **Enterprise SLA**: 99.9% uptime guarantee
-- **24/7 Support**: Phone and email support
-- **Dedicated Success Manager**: For large deployments
-- **Custom Development**: Bespoke features and integrations
-
-## 📈 Performance
-
-### Benchmarks
-- **Requirement Processing**: < 30 seconds for complex requirements
-- **Code Generation**: < 2 minutes for medium projects
-- **Sandbox Execution**: < 5 minutes for full test suites
-- **API Response Time**: < 100ms for most endpoints
-
-### Scaling
-- **Horizontal Scaling**: Kubernetes HPA with custom metrics
-- **Database Scaling**: Read replicas and connection pooling
-- **Storage Scaling**: MinIO distributed setup
-- **Caching**: Redis for session and API caching
-
-## 🛠️ Built With
-
-### Core Technologies
-- **FastAPI**: High-performance async web framework
-- **PostgreSQL**: Advanced open-source database
-- **MinIO**: S3-compatible object storage
-- **Keycloak**: Open-source identity management
-- **Docker**: Containerization platform
-- **Kubernetes**: Container orchestration
-
-### AI & ML
-- **MetaGPT**: Multi-agent AI framework
-- **OpenAI GPT-4**: Advanced language model
-- **Anthropic Claude**: Enterprise AI assistant
-- **LangChain**: LLM application framework
-
-### DevOps & Monitoring
-- **Prometheus**: Metrics collection
-- **Grafana**: Visualization and dashboards
-- **Loki**: Log aggregation
-- **OpenTelemetry**: Observability framework
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **MetaGPT**: For the multi-agent AI framework
-- **FastAPI**: For the excellent web framework
-- **OpenAI & Anthropic**: For powerful AI capabilities
-- **Kubernetes Community**: For orchestration excellence
-- **Open Source Community**: For the amazing tools and libraries
-
-## 📞 Support
-
-### Community Support
-- 📧 **Email**: support@ai-devgen.com
-- 📚 **Documentation**: https://docs.ai-devgen.com
-- 💬 **Discord**: https://discord.gg/ai-devgen
-- 🐛 **GitHub Issues**: https://github.com/ai-devgen/platform/issues
-
-### Enterprise Support
-- 📞 **Phone**: 1-800-AI-DEVGEN
-- 📧 **Enterprise Email**: enterprise@ai-devgen.com
-- 👥 **Dedicated Support**: Contact your account manager
-- 🚀 **Professional Services**: Custom implementation and training
-
-## 🚀 Roadmap
-
-### Q1 2024
-- ✅ AI-powered requirement analysis
-- ✅ Multi-tenant architecture
-- ✅ Production deployment guides
-- 🔄 Frontend dashboard (Next.js)
-
-### Q2 2024
-- 🔄 Advanced AI integrations
-- 🔄 Git platform integrations
-- 🔄 Enterprise security features
-- 🔄 Performance optimizations
-
-### Q3 2024
-- 🔄 Mobile application
-- 🔄 Advanced analytics
-- 🔄 Custom AI model training
-- 🔄 Multi-cloud deployment
-
-### Future
-- 🔄 AI-powered code review
-- 🔄 Automated deployment pipelines
-- 🔄 Integration with enterprise tools
-- 🔄 Advanced compliance features
+### 📋 Next Steps
+1. Complete orchestrator service for AI requirement analysis
+2. Implement codegen service with MetaGPT integration
+3. Add executor service for secure code execution
+4. Integrate storage service for project management
+5. Deploy audit service for comprehensive logging
 
 ---
 
-**Ready to build the future of software development?** Get started with AI Software Generator today!
+**Currently focusing on authentication and API gateway foundation. Full AI software generation platform coming soon!**
 
-[🚀 Quick Start](#-quick-start) | [📖 Documentation](docs/) | [💬 Community](https://discord.gg/ai-devgen) | [🏢 Enterprise](https://ai-devgen.com/enterprise)
+[🚀 Quick Start](#-quick-start) | [📖 Documentation](docs/) | [� Auth Service](saas-devgen/auth-service/) | [� Gateway Service](saas-devgen/gateway-service/)
