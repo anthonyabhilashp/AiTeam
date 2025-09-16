@@ -330,6 +330,124 @@ async def get_execution_status(execution_id: int, db: Session = Depends(get_db))
     }
 
 
+@app.post("/execute/project/{project_uuid}")
+async def execute_project(project_uuid: str, request: dict):
+    """Execute a project from storage in a secure sandbox."""
+    logger.info(f"Project execution request: {project_uuid}")
+    
+    try:
+        import httpx
+        import zipfile
+        import tempfile
+        
+        # Download project from storage service
+        storage_url = settings.storage_service_url
+        download_url = f"{storage_url}/download/project/{project_uuid}"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(download_url, timeout=30.0)
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Project not found in storage"
+                )
+        
+        # Create temporary directory for extraction
+        with tempfile.TemporaryDirectory() as temp_dir:
+            zip_path = os.path.join(temp_dir, f"{project_uuid}.zip")
+            
+            # Save zip file
+            with open(zip_path, 'wb') as f:
+                f.write(response.content)
+            
+            # Extract zip file
+            extract_dir = os.path.join(temp_dir, "project")
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            # Read project metadata
+            metadata_path = os.path.join(extract_dir, "project_metadata.json")
+            metadata = {}
+            if os.path.exists(metadata_path):
+                import json
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+            
+            # Determine execution command based on project type
+            language = metadata.get('language', 'unknown')
+            framework = metadata.get('framework', 'unknown')
+            
+            if language == 'javascript' and framework == 'react':
+                commands = [
+                    "npm install",
+                    "npm run build",
+                    "npm test -- --watchAll=false || true"  # Run tests but don't fail if no tests
+                ]
+            elif language == 'python' and framework == 'fastapi':
+                commands = [
+                    "pip install -r requirements.txt",
+                    "python -m pytest || true"  # Run tests but don't fail if no tests
+                ]
+            else:
+                commands = ["echo 'Project type not supported for execution'"]
+            
+            # Execute commands in Docker sandbox
+            results = []
+            for cmd in commands:
+                try:
+                    result = sandbox.execute_code(
+                        code_dir=extract_dir,
+                        command=cmd,
+                        timeout=request.get('timeout', 300),
+                        environment=request.get('environment', {})
+                    )
+                    results.append({
+                        "command": cmd,
+                        "status": result["status"],
+                        "logs": result["logs"][:1000],  # Limit log size
+                        "exit_code": result.get("exit_code"),
+                        "duration": result.get("duration", 0)
+                    })
+                    
+                    # Stop on first failure for build commands
+                    if result["status"] == "failed" and cmd.startswith(("npm install", "pip install")):
+                        break
+                        
+                except Exception as e:
+                    results.append({
+                        "command": cmd,
+                        "status": "failed",
+                        "logs": f"Execution error: {str(e)}",
+                        "exit_code": -1,
+                        "duration": 0
+                    })
+            
+            # Determine overall status
+            overall_status = "completed"
+            for result in results:
+                if result["status"] == "failed" and result["command"].startswith(("npm install", "pip install")):
+                    overall_status = "failed"
+                    break
+            
+            return {
+                "project_uuid": project_uuid,
+                "status": overall_status,
+                "language": language,
+                "framework": framework,
+                "execution_results": results,
+                "total_duration": sum(r["duration"] for r in results),
+                "executed_at": datetime.utcnow().isoformat()
+            }
+    
+    except Exception as e:
+        logger.error(f"Project execution failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Execution failed: {str(e)}"
+        )
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""

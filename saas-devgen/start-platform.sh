@@ -1,29 +1,21 @@
 #!/bin/bash
 
-# AI Software Generator - Complete Startup Script
-# This script starts all microservices for the AI Software Generator platform
-
+# AI Software Generator - Docker-Based Startup Script
+# This script starts all services using Docker Compose
 
 set -e
 
-# Auto-activate Python virtual environment if not already activated
-if [ -z "$VIRTUAL_ENV" ]; then
-    # Try common venv locations
-    if [ -d "../venv" ]; then
-        echo "🔄 Activating Python virtual environment at ../venv"
-        source ../venv/bin/activate
-    elif [ -d "venv" ]; then
-        echo "🔄 Activating Python virtual environment at ./venv"
-        source venv/bin/activate
-    else
-        echo "⚠️  No Python virtual environment found. Please create one and install dependencies."
-    fi
+# Load environment variables from .env file
+if [ -f ".env" ]; then
+    echo "🔧 Loading environment variables from .env file..."
+    export $(cat .env | grep -v '^#' | xargs)
+    echo "✅ Environment variables loaded"
 else
-    echo "✅ Python virtual environment already activated: $VIRTUAL_ENV"
+    echo "⚠️  No .env file found. Some services may not work properly."
 fi
 
-echo "🚀 Starting AI Software Generator Platform"
-echo "=========================================="
+echo " Starting AI Software Generator Platform with Docker"
+echo "===================================================="
 
 # Check if Docker is running
 if ! docker info >/dev/null 2>&1; then
@@ -31,15 +23,17 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-# Start infrastructure services
-echo "🏗️  Starting infrastructure services..."
+# Stop any existing containers
+echo "🛑 Stopping existing containers..."
 cd infra
-docker-compose --env-file ../.env up -d
-echo "✅ Infrastructure services started"
+docker compose -f docker-compose-full.yml down --remove-orphans 2>/dev/null || true
 
-# Wait for services to be ready
-echo "⏳ Waiting for infrastructure services to be ready..."
-sleep 30
+# Build and start all services
+echo "🏗️  Building and starting all services..."
+docker compose -f docker-compose-full.yml up --build -d
+
+echo "⏳ Waiting for services to start..."
+sleep 60
 
 # Function to check service health
 check_service() {
@@ -58,6 +52,7 @@ check_service() {
         
         if [ $attempt -eq $max_attempts ]; then
             echo "❌ $service_name failed to start"
+            docker compose -f docker-compose-full.yml logs $service_name
             return 1
         fi
         
@@ -67,60 +62,26 @@ check_service() {
     done
 }
 
-# Make startup scripts executable
-chmod +x */start.sh
+echo "� Checking service health..."
 
-# Start all microservices in background
-echo "🚀 Starting microservices..."
+# Check infrastructure services first
+sleep 30
 
-echo "Starting Auth Service..."
-(cd auth-service && ./start.sh) &
-AUTH_PID=$!
-
-echo "Starting Orchestrator Service..."
-(cd orchestrator && ./start.sh) &
-ORCHESTRATOR_PID=$!
-
-echo "Starting Codegen Service..."
-(cd codegen-service && ./start.sh) &
-CODEGEN_PID=$!
-
-echo "Starting Executor Service..."
-(cd executor-service && ./start.sh) &
-EXECUTOR_PID=$!
-
-echo "Starting Storage Service..."
-(cd storage-service && ./start.sh) &
-STORAGE_PID=$!
-
-echo "Starting Audit Service..."
-(cd audit-service && ./start.sh) &
-AUDIT_PID=$!
-
-echo "Starting API Gateway..."
-(cd api-gateway && ./start.sh) &
-GATEWAY_PID=$!
-
-# Wait for services to start
-sleep 10
-
-echo "🔍 Checking service health..."
-
-# Check each service
-check_service "Auth Service" 8001
-check_service "Orchestrator Service" 8002
-check_service "Codegen Service" 8003
-check_service "Executor Service" 8004
-check_service "Storage Service" 8005
-check_service "Audit Service" 8006
-check_service "API Gateway" 8000
+# Check application services
+check_service "auth-service" 8001
+check_service "orchestrator" 8002
+check_service "codegen-service" 8003
+check_service "executor-service" 8004
+check_service "storage-service" 8005
+check_service "audit-service" 8006
+check_service "api-gateway" 9090
 
 echo ""
 echo "🎉 AI Software Generator Platform is ready!"
 echo "=========================================="
 echo ""
 echo "📋 Service URLs:"
-echo "  🌐 API Gateway:        http://localhost:8000"
+echo "  🌐 API Gateway:        http://localhost:9090"
 echo "  🔐 Auth Service:       http://localhost:8001"
 echo "  🎯 Orchestrator:       http://localhost:8002"
 echo "  🛠️  Codegen Service:    http://localhost:8003"
@@ -134,20 +95,19 @@ echo "  🗄️  MinIO:              http://localhost:9001 (admin/admin123)"
 echo "  🔐 Keycloak:           http://localhost:8080 (admin/admin)"
 echo "  📊 Loki:               http://localhost:3100"
 echo ""
-echo "📖 API Documentation:   http://localhost:8000/docs"
-echo "🩺 Health Check:        http://localhost:8000/health"
+echo "📖 API Documentation:   http://localhost:9090/docs"
+echo "🩺 Health Check:        http://localhost:9090/health"
 echo ""
-echo "📝 Logs are available in: /Users/a.pothula/workspace/unity/AiTeam/logs/"
-echo ""
-echo "To stop all services: docker-compose -f infra/docker-compose.yml down"
-echo "To view logs: tail -f /Users/a.pothula/workspace/unity/AiTeam/logs/*.log"
+echo "� Container Management:"
+echo "  View logs:    docker compose -f infra/docker-compose-full.yml logs -f [service-name]"
+echo "  Stop all:     docker compose -f infra/docker-compose-full.yml down"
+echo "  Restart:      docker compose -f infra/docker-compose-full.yml restart [service-name]"
 
 # Function to cleanup on exit
 cleanup() {
     echo ""
     echo "🛑 Shutting down services..."
-    kill $AUTH_PID $ORCHESTRATOR_PID $CODEGEN_PID $EXECUTOR_PID $STORAGE_PID $AUDIT_PID $GATEWAY_PID 2>/dev/null || true
-    cd infra && docker-compose down
+    cd infra && docker compose -f docker-compose-full.yml down
     echo "✅ All services stopped"
 }
 
@@ -155,5 +115,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Keep the script running
+echo ""
 echo "Press Ctrl+C to stop all services"
+echo "Platform is running in Docker containers..."
 wait

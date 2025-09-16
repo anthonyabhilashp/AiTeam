@@ -364,6 +364,172 @@ async def delete_file(
         )
 
 
+@app.post("/upload/project")
+async def upload_project_zip(
+    file: UploadFile = File(...),
+    project_uuid: str = None,
+    metadata: str = None
+):
+    """Upload a complete project as a zip file."""
+    logger.info(f"Project upload request: {file.filename}")
+    
+    try:
+        import json
+        
+        if not project_uuid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="project_uuid is required"
+            )
+        
+        # Parse metadata if provided
+        project_metadata = {}
+        if metadata:
+            try:
+                project_metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse metadata JSON")
+        
+        # Read file data
+        file_data = await file.read()
+        
+        # Upload to Minio
+        bucket = "projects"
+        object_name = f"projects/{project_uuid}/{file.filename}"
+        
+        file_stream = io.BytesIO(file_data)
+        storage_manager.minio_client.put_object(
+            bucket_name=bucket,
+            object_name=object_name,
+            data=file_stream,
+            length=len(file_data),
+            content_type="application/zip"
+        )
+        
+        logger.info(f"Project uploaded to Minio: {object_name}")
+        
+        return {
+            "status": "success",
+            "bucket": bucket,
+            "object_name": object_name,
+            "project_uuid": project_uuid,
+            "size": len(file_data),
+            "metadata": project_metadata
+        }
+        
+    except Exception as e:
+        logger.error(f"Project upload failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Project upload failed: {str(e)}"
+        )
+
+
+@app.get("/download/project/{project_uuid}")
+async def download_project(project_uuid: str):
+    """Download a project zip file."""
+    try:
+        bucket = "projects"
+        # Find the project file in Minio
+        objects = storage_manager.minio_client.list_objects(bucket, prefix=f"projects/{project_uuid}/")
+        
+        project_file = None
+        for obj in objects:
+            if obj.object_name.endswith('.zip'):
+                project_file = obj.object_name
+                break
+        
+        if not project_file:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found"
+            )
+        
+        # Get the file from Minio
+        response = storage_manager.minio_client.get_object(bucket, project_file)
+        
+        def generate_file():
+            for chunk in response.stream(1024):
+                yield chunk
+        
+        filename = os.path.basename(project_file)
+        return StreamingResponse(
+            generate_file(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as e:
+        logger.error(f"Project download failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Download failed: {str(e)}"
+        )
+
+
+@app.delete("/projects/{project_uuid}")
+async def delete_project(project_uuid: str):
+    """Delete a project and all its files."""
+    try:
+        bucket = "projects"
+        prefix = f"projects/{project_uuid}/"
+        
+        # List all objects with the project prefix
+        objects = storage_manager.minio_client.list_objects(bucket, prefix=prefix, recursive=True)
+        
+        deleted_objects = []
+        for obj in objects:
+            storage_manager.minio_client.remove_object(bucket, obj.object_name)
+            deleted_objects.append(obj.object_name)
+            logger.info(f"Deleted object: {obj.object_name}")
+        
+        return {
+            "status": "success",
+            "project_uuid": project_uuid,
+            "deleted_objects": deleted_objects,
+            "count": len(deleted_objects)
+        }
+        
+    except Exception as e:
+        logger.error(f"Project deletion failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Project deletion failed: {str(e)}"
+        )
+
+
+@app.delete("/projects/cleanup/all")
+async def cleanup_all_projects():
+    """Delete all projects - USE WITH CAUTION."""
+    try:
+        bucket = "projects"
+        prefix = "projects/"
+        
+        # List all objects in the projects bucket
+        objects = storage_manager.minio_client.list_objects(bucket, prefix=prefix, recursive=True)
+        
+        deleted_objects = []
+        for obj in objects:
+            storage_manager.minio_client.remove_object(bucket, obj.object_name)
+            deleted_objects.append(obj.object_name)
+        
+        logger.warning(f"CLEANUP: Deleted all {len(deleted_objects)} project objects")
+        
+        return {
+            "status": "success",
+            "message": "All projects deleted",
+            "deleted_objects": deleted_objects,
+            "count": len(deleted_objects)
+        }
+        
+    except Exception as e:
+        logger.error(f"Cleanup all projects failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Cleanup failed: {str(e)}"
+        )
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""

@@ -1,0 +1,213 @@
+# Enterprise Security and Configuration
+# Secrets, ConfigMaps, RBAC, Network Policies
+
+---
+# Secrets for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: ai-devgen
+type: Opaque
+data:
+  password: ZGV2Z2VuLXNlY3VyZQ== # base64 encoded "devgen-secure"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secret
+  namespace: ai-devgen
+type: Opaque
+data:
+  password: YWRtaW4tc2VjdXJl # base64 encoded "admin-secure"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: e2b-secret
+  namespace: ai-devgen
+type: Opaque
+data:
+  api-key: "your-e2b-api-key-here-base64-encoded"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-secret
+  namespace: ai-devgen
+type: Opaque
+data:
+  token: "your-github-token-here-base64-encoded"
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: ai-devgen
+data:
+  log_level: "INFO"
+  max_concurrent_jobs: "10"
+  execution_timeout: "1800"
+  enable_audit_logging: "true"
+  minio_bucket: "ai-devgen-storage"
+  default_ai_model: "gpt-4"
+  max_file_size: "100MB"
+---
+# Service Account for AI DevGen services
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-devgen-service-account
+  namespace: ai-devgen
+---
+# RBAC ClusterRole for service permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-devgen-cluster-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+---
+# RBAC ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-devgen-cluster-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ai-devgen-cluster-role
+subjects:
+- kind: ServiceAccount
+  name: ai-devgen-service-account
+  namespace: ai-devgen
+---
+# Network Policy for micro-segmentation
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-devgen-network-policy
+  namespace: ai-devgen
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ai-devgen
+    - podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: ai-devgen
+    - podSelector: {}
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+---
+# Pod Security Policy
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: ai-devgen-psp
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  supplementalGroups:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  fsGroup:
+    rule: 'MustRunAs'
+    ranges:
+      - min: 1
+        max: 65535
+  readOnlyRootFilesystem: false
+---
+# Horizontal Pod Autoscaler for API Gateway
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway-hpa
+  namespace: ai-devgen
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-gateway
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+# HPA for Codegen Service
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: codegen-service-hpa
+  namespace: ai-devgen
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: codegen-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85

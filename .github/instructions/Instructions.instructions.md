@@ -4,8 +4,7 @@ applyTo: '**'
 Provide project context and coding guidelines that AI should follow when generating code, answering questions, or reviewing changes.
 Dont create files left and right, code files are exceptional.
 Especially the test and md files.
-Always create tests file in /tests/ folder.
-And documents in /docs/ folder.
+
 
 also dont hardcode api keys or providers or model names anywhere in code.
 they should come from settings page.
@@ -15,7 +14,7 @@ Always cleanup backup files you create.
 
 Have detailed logs everywhere.
 
-Logs should be stored in /logs folder. with every run, delete old log file and create new one.
+Logs should be stored in logs folder. with every run, delete old log file and create new one.
 
 Check logs for any issues and fix them.
 
@@ -30,6 +29,39 @@ Keep shared data in shared folder.
 
 Dont add unnecesary code. Only add what is needed
 dont create documents unnecessary i dont need them. 
+
+Dont back off if you see a challenge. as an agent you are designed to overcome those challenges.
+
+dont reinvent wheel, use exisitng proven solutions like apache or MIT licensed libraries or models.
+
+
+this is my #codebase 
+I am building an enterprise spftware that can take requirements and build heavy softwares,
+Use exisiting libraries proven apache or mit licenses.
+dotn reinvent the wheel, keep innovation as little as possible.
+Dont add unnecesary code. Only add what is needed
+dont create documents unnecessary i dont need them. 
+
+Dont back off if you see a challenge. as an agent you are designed to overcome those challenges.
+
+dont create simplified versions or shortcuts, i want this to work perfectly for enterprise product.
+
+
+go and build the missing stuff.
+
+Use docker, make to build and run things.
+
+I dont want shortcuts, i want this to be perfect.
+No hard coding should be done, all variable must come from env or docker compose file.
+
+I want to build a full fledged enterprise software that can buiild big or heavy softwares.
+
+i want like this a non tech person comes to our app and says, i want to build a restaurant servinmg website. and it should be able to chat and gather all requiremnets and suggest what all they can use like lanhguages , scope, etc etc and build it.
+
+then tasks should be created and code should be geenrated this was my vision, unfortunately previous model that worked on this claude model messed up somethings and now i am int his state,
+as i said we want an enterprise product to be built., and also i want to make use of proven ;ibraries instead of reinventing wheel again.
+
+
 
 
 This is my requirement:

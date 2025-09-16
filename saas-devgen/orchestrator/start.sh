@@ -4,6 +4,8 @@
 cd "$(dirname "$0")"
 
 echo "Starting Orchestrator Service..."
-source /Users/a.pothula/workspace/unity/AiTeam/venv/bin/activate
-export PYTHONPATH="/Users/a.pothula/workspace/unity/AiTeam:$PYTHONPATH"
+# Use relative path to virtual environment
+source ../../../venv/bin/activate
+# Set PYTHONPATH to include shared modules and project root
+export PYTHONPATH="../../../shared:../../../:$PYTHONPATH"
 uvicorn main:app --reload --port 8002 --host 0.0.0.0

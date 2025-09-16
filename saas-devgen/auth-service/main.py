@@ -1,191 +1,435 @@
-"""Authentication Service - JWT auth with Keycloak integration."""
-from datetime import datetime, timedelta
-from typing import Optional
-from fastapi import FastAPI, HTTPException, Depends, status
+"""Auth Service - Keycloak Integration."""
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-import jwt
-from keycloak import KeycloakOpenID
-from shared.config import settings
-from shared.logging_utils import setup_logger
-from shared.database import get_db, create_tables
-from shared.models import User, Tenant
-from sqlalchemy.orm import Session
+from keycloak import KeycloakOpenID, KeycloakAdmin
+from keycloak.exceptions import KeycloakAuthenticationError, KeycloakGetError
+import requests
+import os
+from typing import Optional, List
+import json
 
-# Initialize logger
-logger = setup_logger("auth-service", "auth-service.log")
-
-app = FastAPI(title="Authentication Service", version="1.0.0")
-
-# Security
-security = HTTPBearer()
+app = FastAPI(title="Auth Service", version="1.0.0")
 
 # Keycloak configuration
-keycloak_openid = KeycloakOpenID(
-    server_url=settings.keycloak_url,
-    client_id=settings.keycloak_client_id,
-    realm_name=settings.keycloak_realm
-)
+KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "http://localhost:8080")
+KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "master")
+KEYCLOAK_CLIENT_ID = os.getenv("KEYCLOAK_CLIENT_ID", "auth-service")
+KEYCLOAK_CLIENT_SECRET = os.getenv("KEYCLOAK_CLIENT_SECRET", "client-secret")
+KEYCLOAK_ADMIN_USER = os.getenv("KEYCLOAK_ADMIN_USER", "admin")
+KEYCLOAK_ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
 
+# Initialize Keycloak clients (lazy initialization)
+keycloak_openid = None
+keycloak_admin = None
+
+def get_keycloak_openid():
+    """Lazy initialization of Keycloak OpenID client."""
+    global keycloak_openid
+    if keycloak_openid is None:
+        keycloak_openid = KeycloakOpenID(
+            server_url=KEYCLOAK_URL,
+            client_id=KEYCLOAK_CLIENT_ID,
+            realm_name=KEYCLOAK_REALM,
+            client_secret_key=KEYCLOAK_CLIENT_SECRET
+        )
+    return keycloak_openid
+
+def get_keycloak_admin():
+    """Lazy initialization of Keycloak Admin client."""
+    global keycloak_admin
+    if keycloak_admin is None:
+        try:
+            keycloak_admin = KeycloakAdmin(
+                server_url=KEYCLOAK_URL,
+                username=KEYCLOAK_ADMIN_USER,
+                password=KEYCLOAK_ADMIN_PASSWORD,
+                realm_name=KEYCLOAK_REALM,
+                client_id=KEYCLOAK_CLIENT_ID,
+                client_secret_key=KEYCLOAK_CLIENT_SECRET,
+                verify=True
+            )
+        except Exception:
+            # Return None if Keycloak is not available (for testing)
+            keycloak_admin = None
+    return keycloak_admin
+
+# Security scheme
+security = HTTPBearer()
 
 class LoginRequest(BaseModel):
-    """Login request model."""
     username: str
     password: str
 
-
 class LoginResponse(BaseModel):
-    """Login response model."""
     access_token: str
-    token_type: str = "bearer"
-    user_id: int
-    tenant_id: int
-    roles: list
+    refresh_token: str
+    token_type: str = "Bearer"
+    expires_in: int
+    user_id: str
+    roles: List[str]
 
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "Bearer"
+    expires_in: int
 
-class UserResponse(BaseModel):
-    """User response model."""
-    user_id: int
+class RegisterRequest(BaseModel):
     username: str
     email: str
-    tenant_id: int
-    roles: list
-    is_active: bool
+    password: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
 
+class RegisterResponse(BaseModel):
+    user_id: str
+    message: str
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-) -> User:
-    """Get current authenticated user."""
-    try:
-        # Decode JWT token
-        payload = jwt.decode(
-            credentials.credentials,
-            options={"verify_signature": False}  # For development
-        )
-        username: str = payload.get("preferred_username")
-        if username is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials"
-            )
-    except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials"
-        )
-    
-    # Get user from database
-    user = db.query(User).filter(User.username == username).first()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account is disabled"
-        )
-    
-    return user
+class PasswordResetRequest(BaseModel):
+    email: str
 
+class PasswordResetResponse(BaseModel):
+    message: str
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database tables."""
-    logger.info("Starting Auth Service")
-    try:
-        create_tables()
-        logger.info("Database tables initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
+class PasswordChangeRequest(BaseModel):
+    new_password: str
 
+class PasswordChangeResponse(BaseModel):
+    message: str
+
+class UserRoleUpdateRequest(BaseModel):
+    user_id: str
+    roles: List[str]
+
+class UserRoleResponse(BaseModel):
+    user_id: str
+    roles: List[str]
+    message: str
+
+# OAuth2 scheme for token extraction
+oauth2_scheme = HTTPBearer()
 
 @app.post("/login", response_model=LoginResponse)
-async def login(login_request: LoginRequest, db: Session = Depends(get_db)):
-    """Authenticate user and return JWT token."""
-    logger.info(f"Login attempt for user: {login_request.username}")
-    
+async def login(request: LoginRequest):
+    """Authenticate user with Keycloak."""
     try:
-        # Authenticate with Keycloak
-        token = keycloak_openid.token(
-            username=login_request.username,
-            password=login_request.password
+        kc_openid = get_keycloak_openid()
+        token = kc_openid.token(
+            username=request.username,
+            password=request.password
         )
-        
-        # Get user info from Keycloak
-        user_info = keycloak_openid.userinfo(token['access_token'])
-        
-        # Get or create user in local database
-        user = db.query(User).filter(User.username == login_request.username).first()
-        if not user:
-            # Create default tenant if needed
-            tenant = db.query(Tenant).filter(Tenant.org_id == "default").first()
-            if not tenant:
-                tenant = Tenant(name="Default Organization", org_id="default")
-                db.add(tenant)
-                db.commit()
-                db.refresh(tenant)
-            
-            # Create user
-            user = User(
-                username=login_request.username,
-                email=user_info.get("email", f"{login_request.username}@example.com"),
-                tenant_id=tenant.id,
-                roles=["user"]
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            logger.info(f"Created new user: {user.username}")
-        
-        logger.info(f"User {user.username} authenticated successfully")
-        
+
+        # Get user info to extract roles and user_id
+        userinfo = kc_openid.userinfo(token["access_token"])
+        user_id = userinfo.get("sub", "")
+        roles = userinfo.get("realm_access", {}).get("roles", [])
+
         return LoginResponse(
-            access_token=token['access_token'],
-            user_id=user.id,
-            tenant_id=user.tenant_id,
-            roles=user.roles
+            access_token=token["access_token"],
+            refresh_token=token["refresh_token"],
+            token_type="Bearer",
+            expires_in=token.get("expires_in", 300),
+            user_id=user_id,
+            roles=roles
         )
-        
-    except Exception as e:
-        logger.error(f"Login failed for user {login_request.username}: {e}")
+    except KeycloakAuthenticationError:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=401,
             detail="Invalid credentials"
         )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Authentication failed: {str(e)}"
+        )
 
+@app.post("/refresh", response_model=TokenResponse)
+async def refresh_token(refresh_token: str):
+    """Refresh access token using refresh token."""
+    try:
+        kc_openid = get_keycloak_openid()
+        token = kc_openid.refresh_token(refresh_token)
+        return TokenResponse(
+            access_token=token["access_token"],
+            refresh_token=token["refresh_token"],
+            token_type="Bearer",
+            expires_in=token.get("expires_in", 300)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid refresh token"
+        )
 
-@app.get("/user", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
-    """Get current user information."""
-    logger.info(f"User info requested for: {current_user.username}")
-    
-    return UserResponse(
-        user_id=current_user.id,
-        username=current_user.username,
-        email=current_user.email,
-        tenant_id=current_user.tenant_id,
-        roles=current_user.roles,
-        is_active=current_user.is_active
-    )
+@app.post("/logout")
+async def logout(refresh_token: str):
+    """Logout user by invalidating refresh token."""
+    try:
+        kc_openid = get_keycloak_openid()
+        kc_openid.logout(refresh_token)
+        return {"message": "Logged out successfully"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Logout failed: {str(e)}"
+        )
 
+@app.get("/userinfo")
+async def get_userinfo(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get user information from access token."""
+    try:
+        kc_openid = get_keycloak_openid()
+        userinfo = kc_openid.userinfo(credentials.credentials)
+        return userinfo
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+@app.get("/introspect")
+async def introspect_token(token: str):
+    """Introspect token to check validity."""
+    try:
+        kc_openid = get_keycloak_openid()
+        introspection = kc_openid.introspect(token)
+        return introspection
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail="Token introspection failed"
+        )
+
+@app.post("/register", response_model=RegisterResponse)
+async def register_user(request: RegisterRequest):
+    """Register a new user with Keycloak."""
+    try:
+        kc_admin = get_keycloak_admin()
+        if kc_admin is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Keycloak admin not available"
+            )
+
+        # Create user in Keycloak
+        user_data = {
+            "username": request.username,
+            "email": request.email,
+            "firstName": request.first_name,
+            "lastName": request.last_name,
+            "enabled": True,
+            "credentials": [{
+                "type": "password",
+                "value": request.password,
+                "temporary": False
+            }]
+        }
+
+        user_id = kc_admin.create_user(user_data)
+        return RegisterResponse(
+            user_id=user_id,
+            message="User registered successfully"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+@app.post("/password-reset", response_model=PasswordResetResponse)
+async def request_password_reset(request: PasswordResetRequest):
+    """Request password reset for a user."""
+    try:
+        kc_admin = get_keycloak_admin()
+        if kc_admin is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Keycloak admin not available"
+            )
+
+        # Find user by email
+        users = kc_admin.get_users({"email": request.email})
+        if not users:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        user_id = users[0]["id"]
+
+        # Send password reset email
+        kc_admin.send_reset_email(
+            user_id=user_id,
+            redirect_uri=os.getenv("RESET_PASSWORD_REDIRECT_URI", "http://localhost:3000/reset-password")
+        )
+
+        return PasswordResetResponse(
+            message="Password reset email sent successfully"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Password reset failed: {str(e)}"
+        )
+
+@app.post("/change-password", response_model=PasswordChangeResponse)
+async def change_password(request: PasswordChangeRequest, token: str = Depends(oauth2_scheme)):
+    """Change password for authenticated user."""
+    try:
+        kc_admin = get_keycloak_admin()
+        kc_openid = get_keycloak_openid()
+        if kc_openid is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Keycloak OpenID not available"
+            )
+
+        # Verify token and get user info
+        try:
+            userinfo = kc_openid.userinfo(token)
+            user_id = userinfo["sub"]
+        except Exception:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+        if kc_admin is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Keycloak admin not available"
+            )
+
+        # Set new password
+        kc_admin.set_user_password(
+            user_id=user_id,
+            password=request.new_password,
+            temporary=False
+        )
+
+        return PasswordChangeResponse(
+            message="Password changed successfully"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Password change failed: {str(e)}"
+        )
+
+@app.get("/roles")
+async def get_user_roles(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user's roles."""
+    try:
+        kc_openid = get_keycloak_openid()
+        if kc_openid is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Keycloak OpenID not available"
+            )
+
+        userinfo = kc_openid.userinfo(credentials.credentials)
+        roles = userinfo.get("realm_access", {}).get("roles", [])
+        return {"user_id": userinfo.get("sub"), "roles": roles}
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token"
+        )
+
+@app.put("/user/{user_id}/roles", response_model=UserRoleResponse)
+async def update_user_roles(
+    user_id: str,
+    request: UserRoleUpdateRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Update user roles (admin only)."""
+    try:
+        kc_openid = get_keycloak_openid()
+        kc_admin = get_keycloak_admin()
+        if kc_openid is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Keycloak OpenID not available"
+            )
+
+        # Verify token and admin role
+        try:
+            userinfo = kc_openid.userinfo(credentials.credentials)
+            user_roles = userinfo.get("realm_access", {}).get("roles", [])
+        except Exception:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid token"
+            )
+
+        if "admin" not in user_roles:
+            raise HTTPException(
+                status_code=403,
+                detail="Admin access required"
+            )
+
+        if kc_admin is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Keycloak admin not available"
+            )
+
+        # Get available roles
+        realm_roles = kc_admin.get_realm_roles()
+
+        # Map role names to role objects
+        roles_to_assign = []
+        for role in realm_roles:
+            if role["name"] in request.roles:
+                roles_to_assign.append(role)
+
+        # Update user roles
+        kc_admin.assign_realm_roles(user_id=user_id, roles=roles_to_assign)
+
+        return UserRoleResponse(
+            user_id=user_id,
+            roles=request.roles,
+            message="User roles updated successfully"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Role update failed: {str(e)}"
+        )
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "service": "auth-service",
-        "timestamp": datetime.utcnow().isoformat()
-    }
+    try:
+        # Test Keycloak connection
+        keycloak_client = get_keycloak_openid()
+        if keycloak_client:
+            keycloak_client.well_known()
+            keycloak_status = "connected"
+        else:
+            keycloak_status = "not initialized"
 
+        return {
+            "status": "healthy",
+            "service": "auth-service",
+            "keycloak_status": keycloak_status
+        }
+    except Exception as e:
+        return {
+            "status": "healthy",  # Service is healthy even if Keycloak is down
+            "service": "auth-service",
+            "keycloak_status": f"error: {str(e)}"
+        }
 
 if __name__ == "__main__":
     import uvicorn
-    logger.info("Starting Auth Service on port 8001")
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    import os
+
+    # Get port from environment variable, default to 8004 for backward compatibility
+    port = int(os.getenv("AUTH_SERVICE_PORT", "8004"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

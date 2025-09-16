@@ -5,12 +5,13 @@ import { useAuth } from './AuthProvider'
 import ProjectGenerator from './ProjectGenerator'
 import ProjectList from './ProjectList'
 import WorkflowVisualization from './WorkflowVisualization'
+import SettingsPage from './SettingsPage'
 
 interface DashboardProps {
   onLogout: () => void
 }
 
-export default function Dashboard({ onLogout }: DashboardProps) {
+function Dashboard({ onLogout }: DashboardProps) {
   const [activeTab, setActiveTab] = useState('generator')
   const [projects, setProjects] = useState([])
   const { user, logout } = useAuth()
@@ -24,6 +25,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     { id: 'generator', label: '🚀 Generate Software', icon: '🤖' },
     { id: 'projects', label: '📁 My Projects', icon: '📊' },
     { id: 'workflow', label: '⚡ Workflow', icon: '🔄' },
+    { id: 'settings', label: '⚙️ Settings', icon: '🔧' },
     { id: 'audit', label: '📋 Audit Logs', icon: '🔍' }
   ]
 
@@ -86,38 +88,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {activeTab === 'generator' && <ProjectGenerator />}
         {activeTab === 'projects' && <ProjectList projects={projects} />}
         {activeTab === 'workflow' && <WorkflowVisualization />}
-        {activeTab === 'audit' && <AuditLogs />}
+        {activeTab === 'settings' && <SettingsPage />}
+        {activeTab === 'audit' && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-semibold mb-4">📋 Audit Logs</h2>
+            <div className="text-gray-600">
+              <p>Audit logging implementation coming soon...</p>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )
 }
 
-// Placeholder components that will be implemented
-function AuditLogs() {
-  return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="text-xl font-semibold mb-4">📋 Audit Logs</h2>
-      <div className="text-gray-600">
-        <p>Audit logging implementation coming soon...</p>
-        <ul className="mt-4 space-y-2">
-          <li className="flex items-center">
-            <span className="w-2 h-2 bg-green-400 rounded-full mr-3"></span>
-            User login events
-          </li>
-          <li className="flex items-center">
-            <span className="w-2 h-2 bg-blue-400 rounded-full mr-3"></span>
-            Project generation events
-          </li>
-          <li className="flex items-center">
-            <span className="w-2 h-2 bg-yellow-400 rounded-full mr-3"></span>
-            Code execution events
-          </li>
-          <li className="flex items-center">
-            <span className="w-2 h-2 bg-purple-400 rounded-full mr-3"></span>
-            Compliance reporting
-          </li>
-        </ul>
-      </div>
-    </div>
-  )
-}
+export default Dashboard

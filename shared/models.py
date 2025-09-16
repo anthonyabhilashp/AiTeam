@@ -5,6 +5,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, JSON, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+import uuid
 
 Base = declarative_base()
 
@@ -30,9 +31,10 @@ class User(Base):
     """User model."""
     __tablename__ = "users"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     username = Column(String(255), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)  # Add password hash field
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
     roles = Column(JSON, default=list)  # Store roles as JSON array
     is_active = Column(Boolean, default=True)
@@ -51,7 +53,7 @@ class Requirement(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     text = Column(Text, nullable=False)
     status = Column(String(50), default="pending")  # pending, processing, completed, failed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -125,7 +127,7 @@ class AuditLog(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(String(36), ForeignKey("users.id"))
     action = Column(String(255), nullable=False)
     entity = Column(String(255))  # requirement, project, execution, etc.
     entity_id = Column(Integer)

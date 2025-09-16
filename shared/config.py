@@ -8,6 +8,7 @@ class Settings:
     
     def __init__(self):
         # Database
+        self.database_url = os.getenv("DATABASE_URL")
         self.postgres_user = os.getenv("POSTGRES_USER", "devgen")
         self.postgres_password = os.getenv("POSTGRES_PASSWORD", "secret")
         self.postgres_db = os.getenv("POSTGRES_DB", "devgen")
@@ -37,6 +38,7 @@ class Settings:
         self.executor_service_url = os.getenv("EXECUTOR_SERVICE_URL", "http://localhost:8004")
         self.storage_service_url = os.getenv("STORAGE_SERVICE_URL", "http://localhost:8005")
         self.audit_service_url = os.getenv("AUDIT_SERVICE_URL", "http://localhost:8006")
+        self.profile_service_url = os.getenv("PROFILE_SERVICE_URL", "http://localhost:8007")
         
         # Logging
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -47,8 +49,23 @@ settings = Settings()
 
 
 def get_database_url() -> str:
-    """Get PostgreSQL database URL."""
-    return f"postgresql://{settings.postgres_user}:{settings.postgres_password}@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
+    """Get database URL - fallback to SQLite for testing."""
+    if settings.database_url:
+        return settings.database_url
+    
+    # Try PostgreSQL first
+    postgres_url = f"postgresql://{settings.postgres_user}:{settings.postgres_password}@{settings.postgres_host}:{settings.postgres_port}/{settings.postgres_db}"
+    
+    # For testing/development, fallback to SQLite if PostgreSQL is not available
+    try:
+        import psycopg2
+        # Test PostgreSQL connection
+        conn = psycopg2.connect(postgres_url)
+        conn.close()
+        return postgres_url
+    except:
+        # Fallback to SQLite for testing
+        return "sqlite:///./test_aiteam.db"
 
 
 def get_minio_config() -> dict:

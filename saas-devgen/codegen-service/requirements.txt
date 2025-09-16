@@ -1,0 +1,65 @@
+# Enterprise AI Software Generation Platform
+# Production-ready dependencies for large-scale software generation
+
+# Core Enterprise FastAPI Stack
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-dotenv==1.0.0
+requests==2.31.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+boto3==1.34.0
+gitpython==3.1.40
+httpx==0.27.0
+
+# Enterprise AI Framework Dependencies - Carefully Managed Versions
+pydantic==2.6.4
+openai==1.6.1
+anthropic==0.18.1
+
+# Enterprise Multi-Agent AI Frameworks (Apache 2.0 / MIT Licensed)
+
+# MetaGPT - Enterprise Software Company Simulation
+metagpt==0.8.1
+
+# Microsoft AutoGen - Enterprise Multi-Agent Conversations  
+pyautogen==0.2.16
+
+# LangChain Enterprise Stack - Modular Installation
+langchain-core>=0.2.0,<0.4.0
+langchain>=0.2.0,<0.3.0
+langchain-community==0.2.12
+langchain-openai==0.1.25
+
+# LangGraph - Enterprise Workflow Orchestration
+langgraph==0.2.16
+
+# CrewAI - Advanced Multi-Agent Collaboration
+crewai==0.51.0
+
+# Enterprise Utilities and Dependencies
+numpy==1.24.3
+pandas==2.1.1
+rich==13.7.1
+typer==0.9.0
+tiktoken==0.6.0
+tenacity==8.2.3
+aiofiles==23.2.1
+asyncio-throttle==1.0.2
+
+# Enterprise Vector DB and Search
+faiss-cpu==1.7.4
+chromadb==0.4.15
+
+# Enterprise Monitoring and Observability
+structlog==23.2.0
+opentelemetry-api==1.21.0
+opentelemetry-sdk==1.21.0
+
+# Enterprise Development Tools
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+black==23.11.0
+isort==5.12.0
+mypy==1.7.1

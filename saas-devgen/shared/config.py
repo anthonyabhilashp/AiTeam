@@ -37,10 +37,11 @@ class Settings:
         self.executor_service_url = os.getenv("EXECUTOR_SERVICE_URL", "http://localhost:8004")
         self.storage_service_url = os.getenv("STORAGE_SERVICE_URL", "http://localhost:8005")
         self.audit_service_url = os.getenv("AUDIT_SERVICE_URL", "http://localhost:8006")
+        self.profile_service_url = os.getenv("PROFILE_SERVICE_URL", "http://localhost:8007")
         
         # Logging
         self.log_level = os.getenv("LOG_LEVEL", "INFO")
-        self.log_dir = os.getenv("LOG_DIR", "/Users/a.pothula/workspace/unity/AiTeam/logs")
+        self.log_dir = os.getenv("LOG_DIR", "../../logs")
 
 
 settings = Settings()

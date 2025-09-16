@@ -12,6 +12,7 @@ Base = declarative_base()
 class Tenant(Base):
     """Tenant model for multi-tenancy."""
     __tablename__ = "tenants"
+    __table_args__ = {"schema": "aiteam"}
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
@@ -29,11 +30,13 @@ class Tenant(Base):
 class User(Base):
     """User model."""
     __tablename__ = "users"
+    __table_args__ = {"schema": "aiteam"}
     
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(255), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    password_hash = Column(String(255), nullable=False)  # Add password hash field
+    tenant_id = Column(Integer, ForeignKey("aiteam.tenants.id"), nullable=False)
     roles = Column(JSON, default=list)  # Store roles as JSON array
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -48,10 +51,11 @@ class User(Base):
 class Requirement(Base):
     """Requirement model."""
     __tablename__ = "requirements"
+    __table_args__ = {"schema": "aiteam"}
     
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("aiteam.tenants.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("aiteam.users.id"), nullable=False)
     text = Column(Text, nullable=False)
     status = Column(String(50), default="pending")  # pending, processing, completed, failed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -69,9 +73,10 @@ class Requirement(Base):
 class Task(Base):
     """Task model for requirement breakdown."""
     __tablename__ = "tasks"
+    __table_args__ = {"schema": "aiteam"}
     
     id = Column(Integer, primary_key=True, index=True)
-    requirement_id = Column(Integer, ForeignKey("requirements.id"), nullable=False)
+    requirement_id = Column(Integer, ForeignKey("aiteam.requirements.id"), nullable=False)
     description = Column(Text, nullable=False)
     status = Column(String(50), default="pending")  # pending, in_progress, completed, failed
     order_index = Column(Integer, default=0)
@@ -85,10 +90,11 @@ class Task(Base):
 class Project(Base):
     """Project model for generated code."""
     __tablename__ = "projects"
+    __table_args__ = {"schema": "aiteam"}
     
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
-    requirement_id = Column(Integer, ForeignKey("requirements.id"), nullable=False)
+    tenant_id = Column(Integer, ForeignKey("aiteam.tenants.id"), nullable=False)
+    requirement_id = Column(Integer, ForeignKey("aiteam.requirements.id"), nullable=False)
     repo_url = Column(String(500), nullable=False)
     commit_id = Column(String(255))
     project_metadata = Column(JSON, default=dict)
@@ -105,9 +111,10 @@ class Project(Base):
 class Execution(Base):
     """Execution model for sandbox runs."""
     __tablename__ = "executions"
+    __table_args__ = {"schema": "aiteam"}
     
     id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("aiteam.projects.id"), nullable=False)
     command = Column(String(1000), nullable=False)
     logs = Column(Text)
     status = Column(String(50), default="pending")  # pending, running, completed, failed
@@ -122,10 +129,11 @@ class Execution(Base):
 class AuditLog(Base):
     """Audit log model for compliance."""
     __tablename__ = "audit_logs"
+    __table_args__ = {"schema": "aiteam"}
     
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    tenant_id = Column(Integer, ForeignKey("aiteam.tenants.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("aiteam.users.id"))
     action = Column(String(255), nullable=False)
     entity = Column(String(255))  # requirement, project, execution, etc.
     entity_id = Column(Integer)

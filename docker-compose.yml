@@ -1,0 +1,337 @@
+version: '3.9'
+
+services:
+  # Infrastructure Services
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - devgen-network
+
+  db-init:
+    build:
+      context: .
+      dockerfile: saas-devgen/db-init/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    depends_on:
+      - postgres
+    networks:
+      - devgen-network
+    restart: "no"
+
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - devgen-network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+    command: start-dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - devgen-network
+
+  loki:
+    image: grafana/loki:2.9.0
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+    networks:
+      - devgen-network
+
+  # Core Enterprise Services
+  api-gateway:
+    build:
+      context: .
+      dockerfile: saas-devgen/api-gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - ORCHESTRATOR_URL=http://orchestrator:8002
+      - CODEGEN_SERVICE_URL=http://codegen-service:8003
+      - EXECUTOR_SERVICE_URL=http://executor-service:8004
+      - STORAGE_SERVICE_URL=http://storage-service:8005
+      - AUDIT_SERVICE_URL=http://audit-service:8006
+      - PROFILE_SERVICE_URL=http://profile-service:8007
+    depends_on:
+      - postgres
+      - keycloak
+      - auth-service
+      - orchestrator
+      - codegen-service
+      - executor-service
+      - storage-service
+      - audit-service
+      - profile-service
+      - db-init
+    networks:
+      - devgen-network
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: saas-devgen/auth-service/Dockerfile
+    ports:
+      - "${AUTH_SERVICE_PORT:-8004}:${AUTH_SERVICE_PORT:-8004}"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - KEYCLOAK_URL=http://keycloak:8080
+    depends_on:
+      - postgres
+      - keycloak
+    networks:
+      - devgen-network
+
+  gateway-service:
+    image: kong:3.4
+    container_name: kong-gateway
+    env_file:
+      - .env
+    environment:
+      # Kong configuration
+      KONG_DATABASE: ${KONG_DATABASE:-off}
+      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yml
+      KONG_ADMIN_LISTEN: 0.0.0.0:${KONG_ADMIN_PORT:-8001}
+      KONG_PROXY_LISTEN: 0.0.0.0:${API_GATEWAY_PORT:-8000}
+      KONG_ADMIN_GUI_LISTEN: 0.0.0.0:${KONG_ADMIN_GUI_PORT:-8002}
+      KONG_ADMIN_GUI_URL: http://localhost:${KONG_ADMIN_GUI_PORT:-8002}
+
+      # Service Ports
+      AUTH_SERVICE_PORT: ${AUTH_SERVICE_PORT:-8004}
+
+      # SSL Configuration (disabled for now)
+      # KONG_SSL_CERT: /kong/ssl/tls.crt
+      # KONG_SSL_CERT_KEY: /kong/ssl/tls.key
+
+      # Plugin Configuration
+      KONG_PLUGINS: bundled,jwt,rate-limiting,request-transformer,response-transformer,key-auth,cors,request-size-limiting,ip-restriction
+
+      # JWT Plugin Configuration
+      KONG_JWT_SECRET: ${JWT_SECRET:-kong-secret}
+
+      # Rate Limiting Configuration
+      KONG_RATE_LIMITING_STRATEGY: local
+
+      # Logging
+      KONG_LOG_LEVEL: ${KONG_LOG_LEVEL:-info}
+
+      # Custom Headers (disabled for now)
+      # KONG_HEADERS: X-Gateway-Service:Kong,X-Gateway-Version:3.4
+
+    ports:
+      - "${API_GATEWAY_PORT:-8000}:${API_GATEWAY_PORT:-8000}"      # Proxy port
+      - "${KONG_ADMIN_PORT:-8001}:${KONG_ADMIN_PORT:-8001}"      # Admin API
+      - "${KONG_ADMIN_GUI_PORT:-8002}:${KONG_ADMIN_GUI_PORT:-8002}"  # Admin GUI
+
+    volumes:
+      - ./saas-devgen/gateway-service/kong.yml:/kong/declarative/kong.yml:ro
+      - kong_ssl:/kong/ssl
+      - kong_logs:/kong/logs
+
+    networks:
+      - devgen-network
+
+    depends_on:
+      - postgres
+      - auth-service
+
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    restart: unless-stopped
+
+  profile-service:
+    build:
+      context: .
+      dockerfile: saas-devgen/profile-service/Dockerfile
+    ports:
+      - "8007:8007"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    depends_on:
+      - postgres
+    networks:
+      - devgen-network
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: saas-devgen/orchestrator/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - PROFILE_SERVICE_URL=http://profile-service:8007
+    depends_on:
+      - postgres
+      - profile-service
+    networks:
+      - devgen-network
+
+  codegen-service:
+    build:
+      context: .
+      dockerfile: saas-devgen/codegen-service/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - STORAGE_SERVICE_URL=http://storage-service:8005
+      - PROFILE_SERVICE_URL=http://profile-service:8007
+    depends_on:
+      - postgres
+      - minio
+      - storage-service
+      - profile-service
+    networks:
+      - devgen-network
+
+  executor-service:
+    build:
+      context: .
+      dockerfile: saas-devgen/executor-service/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - postgres
+    networks:
+      - devgen-network
+
+  storage-service:
+    build:
+      context: .
+      dockerfile: saas-devgen/storage-service/Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    depends_on:
+      - postgres
+      - minio
+    networks:
+      - devgen-network
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: saas-devgen/audit-service/Dockerfile
+    ports:
+      - "8006:8006"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - LOKI_URL=http://loki:3100
+    depends_on:
+      - postgres
+      - loki
+    networks:
+      - devgen-network
+
+volumes:
+  postgres_data:
+  minio_data:
+  loki_data:
+  kong_ssl:
+  kong_logs:
+  kong_config:
+
+networks:
+  devgen-network:
+    driver: bridge
