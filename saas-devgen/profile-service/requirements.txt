@@ -7,3 +7,8 @@ pydantic==2.5.0
 python-multipart==0.0.6
 PyJWT==2.8.0
 cryptography==41.0.7
+
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+httpx==0.25.2

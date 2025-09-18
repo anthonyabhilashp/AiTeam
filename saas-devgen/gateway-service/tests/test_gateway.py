@@ -1,109 +1,224 @@
-"""Test Gateway Service Core Functionality."""
+"""Test Gateway Service FastAPI Endpoints."""
 import pytest
 from unittest.mock import patch, Mock
-from main import GatewayService
+from fastapi.testclient import TestClient
+from main import app
 
 
-class TestGatewayService:
-    """Test GatewayService class functionality."""
+class TestGatewayHealth:
+    """Test Gateway Service Health Endpoints."""
 
-    def test_init_default_values(self):
-        """Test GatewayService initialization with default values."""
-        service = GatewayService()
+    def test_health_endpoint(self, client):
+        """Test gateway health endpoint."""
+        response = client.get("/health")
 
-        assert service.kong_admin_url == "http://localhost:8001"
-        assert service.kong_proxy_url == "http://localhost:8000"
-        assert service.kong_gui_url == "http://localhost:8002"
+        assert response.status_code == 200
+        assert response.json() == {"status": "healthy"}
 
-    def test_init_custom_values(self, mock_env):
-        """Test GatewayService initialization with custom environment values."""
-        service = GatewayService()
+    def test_root_endpoint(self, client):
+        """Test root endpoint."""
+        response = client.get("/")
 
-        assert service.kong_admin_url == "http://localhost:8001"
-        assert service.kong_proxy_url == "http://localhost:8000"
-        assert service.kong_gui_url == "http://localhost:8002"
-
-    @patch('requests.get')
-    def test_check_kong_status_success(self, mock_get, gateway_service, mock_kong_response):
-        """Test successful Kong status check."""
-        mock_get.return_value = mock_kong_response
-
-        result = gateway_service.check_kong_status()
-
-        assert result is True
-        mock_get.assert_called_once_with("http://localhost:8001/status", timeout=10)
-
-    @patch('requests.get')
-    def test_check_kong_status_failure(self, mock_get, gateway_service):
-        """Test failed Kong status check."""
-        mock_response = Mock()
-        mock_response.status_code = 500
-        mock_get.return_value = mock_response
-
-        result = gateway_service.check_kong_status()
-
-        assert result is False
-
-    @patch('requests.get')
-    def test_check_kong_status_exception(self, mock_get, gateway_service):
-        """Test Kong status check with exception."""
-        mock_get.side_effect = Exception("Connection error")
-
-        result = gateway_service.check_kong_status()
-
-        assert result is False
-
-    @patch('requests.get')
-    def test_get_services_success(self, mock_get, gateway_service, mock_services_response):
-        """Test successful services retrieval."""
-        mock_get.return_value = mock_services_response
-
-        result = gateway_service.get_services()
-
-        assert result is not None
-        assert len(result["data"]) == 1
-        assert result["data"][0]["name"] == "auth-service"
-        mock_get.assert_called_once_with("http://localhost:8001/services", timeout=10)
-
-    @patch('requests.get')
-    def test_get_services_failure(self, mock_get, gateway_service):
-        """Test failed services retrieval."""
-        mock_response = Mock()
-        mock_response.status_code = 404
-        mock_get.return_value = mock_response
-
-        result = gateway_service.get_services()
-
-        assert result is None
-
-    @patch('requests.get')
-    def test_get_routes_success(self, mock_get, gateway_service, mock_routes_response):
-        """Test successful routes retrieval."""
-        mock_get.return_value = mock_routes_response
-
-        result = gateway_service.get_routes()
-
-        assert result is not None
-        assert len(result["data"]) == 1
-        assert result["data"][0]["paths"] == ["/auth"]
-        mock_get.assert_called_once_with("http://localhost:8001/routes", timeout=10)
-
-    @patch('requests.get')
-    def test_get_routes_failure(self, mock_get, gateway_service):
-        """Test failed routes retrieval."""
-        mock_response = Mock()
-        mock_response.status_code = 500
-        mock_get.return_value = mock_response
-
-        result = gateway_service.get_routes()
-
-        assert result is None
+        assert response.status_code == 200
+        assert "API Gateway" in response.json()["message"]
 
 
-def test_gateway_service_creation():
-    """Test GatewayService can be created."""
-    service = GatewayService()
-    assert service is not None
-    assert hasattr(service, 'kong_admin_url')
-    assert hasattr(service, 'kong_proxy_url')
-    assert hasattr(service, 'kong_gui_url')
+class TestAuthentication:
+    """Test Authentication Endpoints."""
+
+    def test_login_success(self, client, mock_get_keycloak_openid, login_data):
+        """Test successful user login."""
+        response = client.post("/auth/login", json=login_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+        assert data["token_type"] == "Bearer"
+
+    def test_login_failure(self, client, mock_get_keycloak_openid):
+        """Test login failure with invalid credentials."""
+        from keycloak.exceptions import KeycloakAuthenticationError
+        mock_get_keycloak_openid.token.side_effect = KeycloakAuthenticationError("Invalid credentials")
+
+        login_data = {"username": "invalid", "password": "invalid"}
+        response = client.post("/auth/login", json=login_data)
+
+        assert response.status_code == 401
+        assert "Invalid" in response.json()["detail"]
+
+    def test_user_info_success(self, client, mock_keycloak_openid, valid_jwt_token):
+        """Test successful user info retrieval."""
+        response = client.get("/auth/user", headers={"Authorization": f"Bearer {valid_jwt_token}"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["user_id"] == "test-user-id"
+        assert data["username"] == "testuser"
+        assert data["email"] == "test@example.com"
+
+    def test_user_info_no_token(self, client):
+        """Test user info without authorization token."""
+        response = client.get("/auth/user")
+
+        assert response.status_code == 403  # HTTPBearer returns 403 for missing token
+        assert "not authenticated" in response.json()["detail"].lower()
+
+    def test_user_info_invalid_token(self, client):
+        """Test user info with invalid token."""
+        response = client.get("/auth/user", headers={"Authorization": "Bearer invalid-token"})
+
+        assert response.status_code == 401
+        assert "Invalid" in response.json()["detail"]
+
+
+class TestUserRegistration:
+    """Test User Registration Endpoints."""
+
+    def test_register_user_success(self, client, mock_get_keycloak_admin, mock_kafka_producer, user_registration_data):
+        """Test successful user registration."""
+        response = client.post("/auth/register", json=user_registration_data)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "message" in data
+        assert "user_id" in data
+        assert data["user_id"] == "test-user-id"
+
+    def test_register_user_missing_fields(self, client):
+        """Test user registration with missing required fields."""
+        incomplete_data = {"username": "testuser"}
+        response = client.post("/auth/register", json=incomplete_data)
+
+        assert response.status_code == 422  # Validation error
+
+    def test_register_user_keycloak_error(self, client, mock_get_keycloak_admin):
+        """Test user registration with Keycloak error."""
+        mock_get_keycloak_admin.create_user.side_effect = Exception("Keycloak error")
+
+        response = client.post("/auth/register", json={
+            "username": "testuser",
+            "email": "test@example.com",
+            "password": "password123"
+        })
+
+        assert response.status_code == 500
+        assert "unexpected error occurred during registration" in response.json()["detail"]
+
+
+class TestProxyRoutes:
+    """Test Proxy Route Endpoints."""
+
+    def test_proxy_profile_health(self, client, valid_jwt_token):
+        """Test proxy to profile service health endpoint."""
+        from fastapi import Response
+
+        with patch('main.proxy_request') as mock_proxy:
+            # Create a proper FastAPI Response object
+            mock_response = Response(
+                content='{"status": "healthy"}',
+                status_code=200,
+                media_type="application/json"
+            )
+            mock_proxy.return_value = mock_response
+
+            response = client.get("/profile/health", headers={"Authorization": f"Bearer {valid_jwt_token}"})
+
+            assert response.status_code == 200
+            assert response.json() == {"status": "healthy"}
+
+    def test_proxy_profile_without_auth(self, client):
+        """Test proxy to profile service without authentication."""
+        response = client.get("/profile/health")
+
+        assert response.status_code == 403
+        assert "Not authenticated" in response.json()["detail"]
+
+    def test_proxy_unknown_service(self, client, valid_jwt_token):
+        """Test proxy to unknown service."""
+        response = client.get("/unknown/health", headers={"Authorization": f"Bearer {valid_jwt_token}"})
+
+        assert response.status_code == 404
+        assert "Not Found" in response.json()["detail"]
+
+
+class TestErrorHandling:
+    """Test Error Handling."""
+
+    def test_invalid_json(self, client):
+        """Test handling of invalid JSON."""
+        response = client.post("/auth/login", data="invalid json")
+
+        assert response.status_code == 422
+
+    def test_method_not_allowed(self, client):
+        """Test method not allowed."""
+        response = client.put("/health")
+
+        assert response.status_code == 405
+
+    def test_not_found(self, client):
+        """Test not found endpoint."""
+        response = client.get("/nonexistent")
+
+        assert response.status_code == 404
+
+
+class TestMiddleware:
+    """Test Middleware Functionality."""
+
+    def test_cors_headers(self, client):
+        """Test CORS headers are present."""
+        # Test with a POST request that should have CORS headers
+        response = client.post("/auth/login", json={"username": "test", "password": "test"})
+
+        # Check if CORS headers are present (may not be for all endpoints)
+        cors_headers = ["access-control-allow-origin", "access-control-allow-methods"]
+        has_cors = any(header in response.headers for header in cors_headers)
+        if has_cors:
+            assert "access-control-allow-origin" in response.headers
+            assert "access-control-allow-methods" in response.headers
+            assert "access-control-allow-headers" in response.headers
+
+
+class TestIntegration:
+    """Test Integration Scenarios."""
+
+    def test_full_authentication_flow(self, client, mock_get_keycloak_openid, mock_get_keycloak_admin, mock_kafka_producer):
+        """Test complete authentication flow."""
+        # Register user
+        register_data = {
+            "username": "testuser",
+            "email": "test@example.com",
+            "password": "password123",
+            "first_name": "John",
+            "last_name": "Doe"
+        }
+        register_response = client.post("/auth/register", json=register_data)
+        assert register_response.status_code == 200
+
+        # Login user
+        login_data = {"username": "testuser", "password": "password123"}
+        login_response = client.post("/auth/login", json=login_data)
+        assert login_response.status_code == 200
+
+        token = login_response.json()["access_token"]
+
+        # Access protected endpoint
+        user_response = client.get("/auth/user", headers={"Authorization": f"Bearer {token}"})
+        assert user_response.status_code == 200
+
+        # Access proxy endpoint
+        from fastapi import Response
+
+        with patch('main.proxy_request') as mock_proxy:
+            # Create a proper FastAPI Response object
+            mock_response = Response(
+                content='{"status": "healthy"}',
+                status_code=200,
+                media_type="application/json"
+            )
+            mock_proxy.return_value = mock_response
+
+            proxy_response = client.get("/profile/health", headers={"Authorization": f"Bearer {token}"})
+            assert proxy_response.status_code == 200

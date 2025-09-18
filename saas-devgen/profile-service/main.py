@@ -30,6 +30,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://devgen:devgen@postgres:54
 # Keycloak configuration
 KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "http://keycloak:8080")
 KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "master")
+KEYCLOAK_AUDIENCE = os.getenv("KEYCLOAK_AUDIENCE", "profile-service")  # Expected audience for JWT tokens
 
 # Kafka configuration
 KAFKA_BROKER_URL = os.getenv("KAFKA_BROKER_URL", "kafka:29092")
@@ -178,111 +179,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def get_keycloak_public_keys():
-    """Fetch and cache Keycloak public keys."""
-    global keycloak_public_keys, keys_last_updated
-
-    current_time = time.time()
-    if (keycloak_public_keys is None or
-        keys_last_updated is None or
-        current_time - keys_last_updated > KEYS_CACHE_DURATION):
-
-        try:
-            # Fetch Keycloak's JWKS (JSON Web Key Set)
-            jwks_url = f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
-            response = requests.get(jwks_url, timeout=10)
-
-            if response.status_code == 200:
-                jwks = response.json()
-                keycloak_public_keys = {}
-                for key in jwks.get('keys', []):
-                    kid = key.get('kid')
-                    if kid:
-                        keycloak_public_keys[kid] = key
-                keys_last_updated = current_time
-                logger.info(f"✅ Fetched {len(keycloak_public_keys)} Keycloak public keys")
-            else:
-                logger.error(f"❌ Failed to fetch Keycloak public keys: {response.status_code}")
-                return None
-        except Exception as e:
-            logger.error(f"❌ Error fetching Keycloak public keys: {e}")
-            return None
-
-    return keycloak_public_keys
-
-def validate_jwt_token(token: str):
-    """Validate JWT token using Keycloak public keys."""
-    try:
-        # Decode header to get key ID
-        header = jwt.get_unverified_header(token)
-        kid = header.get('kid')
-
-        if not kid:
-            logger.error("❌ No key ID found in JWT header")
-            return None
-
-        # Get public keys
-        public_keys = get_keycloak_public_keys()
-        if not public_keys or kid not in public_keys:
-            logger.error(f"❌ Public key not found for kid: {kid}")
-            return None
-
-        # Get the public key
-        key_data = public_keys[kid]
-
-        # Convert JWK to PEM format
-        if key_data.get('kty') == 'RSA':
-            # Use PyJWT's built-in JWK support
-            from jwt import PyJWK
-            public_key = PyJWK(key_data).key
-        else:
-            logger.error(f"❌ Unsupported key type: {key_data.get('kty')}")
-            return None
-
-        # Decode and validate token
-        payload = jwt.decode(
-            token,
-            public_key,
-            algorithms=['RS256'],
-            audience=key_data.get('use', 'sig'),
-            issuer=f"{KEYCLOAK_URL}/realms/{KEYCLOAK_REALM}"
-        )
-
-        return payload
-
-    except jwt.ExpiredSignatureError:
-        logger.error("❌ Token has expired")
-        return None
-    except jwt.InvalidTokenError as e:
-        logger.error(f"❌ Invalid token: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"❌ Error validating token: {e}")
-        return None
+# Removed JWT validation functions - authentication handled by gateway service
 
 def get_current_user(request: Request):
-    """Extract user information from JWT token."""
-    auth_header = request.headers.get("Authorization")
-
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authorization header missing or invalid")
-
-    token = auth_header.replace("Bearer ", "")
-
-    # Validate JWT token
-    payload = validate_jwt_token(token)
-
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    # Extract user information
-    user_id = payload.get("sub", "")
-    username = payload.get("preferred_username", payload.get("username", ""))
-    email = payload.get("email", "")
-    roles = payload.get("realm_access", {}).get("roles", [])
+    """Extract user information from gateway headers (trusted source)."""
+    # Get user info from headers set by gateway service
+    user_id = request.headers.get("X-User-ID")
+    username = request.headers.get("X-User-Username")
+    email = request.headers.get("X-User-Email")
+    roles = request.headers.get("X-User-Roles", "").split(",") if request.headers.get("X-User-Roles") else []
 
     if not user_id:
-        raise HTTPException(status_code=401, detail="User ID not found in token")
+        raise HTTPException(status_code=401, detail="User authentication required")
 
     return {
         "user_id": user_id,

@@ -1,12 +1,15 @@
 # Gateway Service Requirements
-# Kong is containerized, so no Python dependencies needed
-# This file is kept for consistency with other services
+fastapi==0.104.1
+uvicorn==0.24.0
+python-keycloak==3.0.0
+kafka-python==2.0.2
+httpx==0.25.0
+pydantic==2.5.0
+PyJWT==2.8.0
+cryptography==41.0.7
 
 # Test Dependencies
 pytest==7.4.0
 pytest-cov==4.1.0
 pytest-asyncio==0.21.1
 requests==2.31.0
-httpx==0.25.0
-fastapi==0.104.1
-uvicorn==0.24.0

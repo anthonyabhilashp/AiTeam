@@ -9,6 +9,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy service code
 COPY saas-devgen/profile-service/main.py .
 
+# Copy tests directory
+COPY saas-devgen/profile-service/tests/ ./tests/
+
 # Expose port for FastAPI
 EXPOSE 8005
 
