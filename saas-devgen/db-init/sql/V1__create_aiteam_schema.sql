@@ -1,10 +1,10 @@
 -- V1__create_aiteam_schema.sql
 -- Create the aiteam schema for the enterprise platform
 
-CREATE SCHEMA IF NOT EXISTS aiteam;
+CREATE SCHEMA IF NOT EXISTS ${schema};
 
 -- Create flyway schema history table in the aiteam schema
-CREATE TABLE IF NOT EXISTS aiteam.flyway_schema_history (
+CREATE TABLE IF NOT EXISTS ${schema}.flyway_schema_history (
     installed_rank INTEGER NOT NULL,
     version VARCHAR(50),
     description VARCHAR(200) NOT NULL,

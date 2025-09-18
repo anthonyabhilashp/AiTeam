@@ -26,6 +26,7 @@ def client():
 def mock_env():
     """Mock environment variables for testing."""
     env_vars = {
+        'TEST_MODE': 'true',
         'KEYCLOAK_URL': 'http://keycloak:8080',
         'KEYCLOAK_REALM': 'master',
         'KEYCLOAK_CLIENT_ID': 'admin-cli',

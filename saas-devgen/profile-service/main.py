@@ -26,6 +26,7 @@ logger.addHandler(handler)
 
 # Environment variables
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://devgen:devgen@postgres:5432/devgen")
+SCHEMA = os.getenv("SCHEMA", "aiteam")
 
 # Keycloak configuration
 KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "http://keycloak:8080")
@@ -116,7 +117,7 @@ def create_user_profile_from_event(event_data: Dict[str, Any]):
 
         try:
             # Check if profile already exists
-            cursor.execute("SELECT user_id FROM aiteam.profiles WHERE user_id = %s", (user_id,))
+            cursor.execute(f"SELECT user_id FROM {SCHEMA}.profiles WHERE user_id = %s", (user_id,))
             existing_profile = cursor.fetchone()
 
             if existing_profile:
@@ -124,8 +125,8 @@ def create_user_profile_from_event(event_data: Dict[str, Any]):
                 return
 
             # Create new user profile
-            cursor.execute("""
-                INSERT INTO aiteam.profiles (user_id, username, email, first_name, last_name)
+            cursor.execute(f"""
+                INSERT INTO {SCHEMA}.profiles (user_id, username, email, first_name, last_name)
                 VALUES (%s, %s, %s, %s, %s)
             """, (user_id, username, email, first_name, last_name))
 
@@ -220,9 +221,9 @@ async def get_my_profile(user_info: dict = Depends(get_current_user)):
             if not user_id:
                 raise HTTPException(status_code=400, detail="User ID not found")
 
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT user_id, username, email, first_name, last_name, created_at, updated_at
-                FROM aiteam.profiles
+                FROM {SCHEMA}.profiles
                 WHERE user_id = %s
             """, (user_id,))
 
@@ -269,7 +270,7 @@ async def update_my_profile(
                 raise HTTPException(status_code=400, detail="User ID not found")
 
             # Check if profile exists
-            cursor.execute("SELECT user_id FROM aiteam.profiles WHERE user_id = %s", (user_id,))
+            cursor.execute(f"SELECT user_id FROM {SCHEMA}.profiles WHERE user_id = %s", (user_id,))
             if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail="User profile not found")
 
@@ -279,8 +280,8 @@ async def update_my_profile(
 
             if profile_update.username:
                 # Check if username is already taken
-                cursor.execute("""
-                    SELECT user_id FROM aiteam.profiles
+                cursor.execute(f"""
+                    SELECT user_id FROM {SCHEMA}.profiles
                     WHERE username = %s AND user_id != %s
                 """, (profile_update.username, user_id))
                 if cursor.fetchone():
@@ -291,8 +292,8 @@ async def update_my_profile(
 
             if profile_update.email:
                 # Check if email is already taken
-                cursor.execute("""
-                    SELECT user_id FROM aiteam.profiles
+                cursor.execute(f"""
+                    SELECT user_id FROM {SCHEMA}.profiles
                     WHERE email = %s AND user_id != %s
                 """, (profile_update.email, user_id))
                 if cursor.fetchone():
@@ -312,7 +313,7 @@ async def update_my_profile(
             if update_fields:
                 update_values.append(user_id)
                 cursor.execute(f"""
-                    UPDATE aiteam.profiles
+                    UPDATE {SCHEMA}.profiles
                     SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP
                     WHERE user_id = %s
                 """, update_values)
@@ -320,9 +321,9 @@ async def update_my_profile(
                 conn.commit()
 
             # Get updated profile data
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT user_id, username, email, first_name, last_name, created_at, updated_at
-                FROM aiteam.profiles WHERE user_id = %s
+                FROM {SCHEMA}.profiles WHERE user_id = %s
             """, (user_id,))
 
             updated_profile = cursor.fetchone()

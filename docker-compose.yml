@@ -23,7 +23,8 @@ services:
       FLYWAY_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       FLYWAY_USER: ${POSTGRES_USER}
       FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
-      FLYWAY_SCHEMAS: aiteam
+      FLYWAY_SCHEMAS: ${SCHEMA:-aiteam}
+      FLYWAY_PLACEHOLDERS_SCHEMA: ${SCHEMA:-aiteam}
       FLYWAY_BASELINE_ON_MIGRATE: 'true'
       FLYWAY_VALIDATE_ON_MIGRATE: 'true'
       FLYWAY_OUT_OF_ORDER: 'true'
@@ -83,8 +84,9 @@ services:
       - FLYWAY_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       - FLYWAY_USER=${POSTGRES_USER}
       - FLYWAY_PASSWORD=${POSTGRES_PASSWORD}
-      - FLYWAY_SCHEMAS=aiteam,public
-      - FLYWAY_DEFAULT_SCHEMA=aiteam
+      - FLYWAY_SCHEMAS=${SCHEMA:-aiteam},public
+      - FLYWAY_DEFAULT_SCHEMA=${SCHEMA:-aiteam}
+      - FLYWAY_PLACEHOLDERS_SCHEMA=${SCHEMA:-aiteam}
       - FLYWAY_BASELINE_ON_MIGRATE=true
       - FLYWAY_VALIDATE_ON_MIGRATE=true
       - FLYWAY_OUT_OF_ORDER=false
@@ -145,13 +147,14 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB}
+      - SCHEMA=${SCHEMA:-aiteam}
       - KEYCLOAK_URL=http://keycloak:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-master}
       - KEYCLOAK_AUDIENCE=${KEYCLOAK_AUDIENCE:-profile-service}
       - PROFILE_SERVICE_PORT=${PROFILE_SERVICE_PORT:-8005}
-      - KAFKA_BROKER_URL=${KAFKA_BROKER_URL}
-      - KAFKA_TOPIC_USER_REGISTRATION=${KAFKA_TOPIC_USER_REGISTRATION}
-      - KAFKA_GROUP_ID=${KAFKA_GROUP_ID}
+      - KAFKA_BROKER_URL=${KAFKA_BROKER_URL:-kafka:29092}
+      - KAFKA_TOPIC_USER_REGISTRATION=${KAFKA_TOPIC_USER_REGISTRATION:-user-registration-events}
+      - KAFKA_GROUP_ID=${KAFKA_GROUP_ID:-profile-service}
     depends_on:
       - postgres
       - keycloak
@@ -171,14 +174,14 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-master}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-admin-cli}
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET}
-      - KAFKA_BROKER_URL=kafka:29092
-      - KAFKA_TOPIC_USER_REGISTRATION=user-registration-events
-      - PROFILE_SERVICE_URL=http://profile-service:8005
-      - ORCHESTRATOR_URL=http://orchestrator:8002
-      - CODEGEN_SERVICE_URL=http://codegen-service:8003
-      - EXECUTOR_SERVICE_URL=http://executor-service:8006
-      - STORAGE_SERVICE_URL=http://storage-service:8007
-      - AUDIT_SERVICE_URL=http://audit-service:8008
+      - KAFKA_BROKER_URL=${KAFKA_BROKER_URL:-kafka:29092}
+      - KAFKA_TOPIC_USER_REGISTRATION=${KAFKA_TOPIC_USER_REGISTRATION:-user-registration-events}
+      - PROFILE_SERVICE_URL=http://profile-service:${PROFILE_SERVICE_PORT:-8005}
+      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://orchestrator:8002}
+      - CODEGEN_SERVICE_URL=${CODEGEN_SERVICE_URL:-http://codegen-service:8003}
+      - EXECUTOR_SERVICE_URL=${EXECUTOR_SERVICE_URL:-http://executor-service:8006}
+      - STORAGE_SERVICE_URL=${STORAGE_SERVICE_URL:-http://storage-service:8007}
+      - AUDIT_SERVICE_URL=${AUDIT_SERVICE_URL:-http://audit-service:8008}
     depends_on:
       - postgres
       - keycloak
@@ -192,9 +195,6 @@ volumes:
   postgres_data:
   minio_data:
   loki_data:
-  kong_ssl:
-  kong_logs:
-  kong_config:
   kafka_data:
   zookeeper_data:
   zookeeper_logs:
